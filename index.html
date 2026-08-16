@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>办公文档</title>
+<style>
+:root {
+    --card-bg: #ffffff;
+    --card-border: rgba(0, 0, 0, 0.08);
+    --text: #1f2328; --text-dim: #57606a; --text-muted: #8b949e;
+    --accent: #5b63ff; --accent-2: #9c4fc4;
+    --wolf: #ef4444; --seer: #22c55e; --witch: #f59e0b;
+    --hunter: #06b6d4; --villager: #94a3b8;
+    --danger: #ef4444; --success: #22c55e; --warn: #f59e0b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    max-width: 1200px; margin: 0 auto; padding: 12px;
+    background: #ffffff;
+    color: var(--text);
+    min-height: 100vh;
+    transition: background 1.2s ease;
+}
+/* ponytail: 白底办公风，阶段切换只做淡色提示 */
+body.day-mode { background: #fffaf0; }
+body.vote-mode { background: #fff5f5; }
+body.end-mode { background: #f6f8ff; }
+
+#loginView, #gameView { position: relative; z-index: 1; }
+h1 { font-size: 1.6em; margin: 4px 0; font-weight: 700; color: var(--accent);
+     letter-spacing: 1px; }
+h2 { font-size: 0.95em; margin: 0 0 10px; color: var(--text-dim);
+     text-transform: uppercase; letter-spacing: 2px; font-weight: 600; }
+
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 16px; padding: 16px 18px; margin: 10px 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    animation: rise 0.4s ease-out;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+input[type=text] {
+    padding: 11px 14px; border: 1px solid rgba(0,0,0,0.12);
+    border-radius: 10px; width: 100%; font-size: 15px;
+    background: #ffffff; color: var(--text);
+    transition: all 0.2s;
+}
+input[type=text]:focus { outline: none; border-color: var(--accent);
+    background: #ffffff; box-shadow: 0 0 0 3px rgba(91,99,255,0.12); }
+input[type=text]::placeholder { color: var(--text-muted); }
+label { font-size: 12px; color: var(--text-dim); letter-spacing: 1px; }
+
+button {
+    padding: 10px 18px; border: none; color: #fff;
+    border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 1px 4px rgba(91,99,255,0.2);
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    letter-spacing: 0.5px;
+}
+button:hover { transform: translateY(-2px); box-shadow: 0 2px 8px rgba(91,99,255,0.3); }
+button:active { transform: translateY(0); }
+button:disabled { background: #c0c4cc !important; box-shadow: none; cursor: not-allowed; opacity: 0.6; }
+button.success { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 1px 4px rgba(34,197,94,0.2); }
+button.success:hover { box-shadow: 0 2px 8px rgba(34,197,94,0.3); }
+button.danger { background: linear-gradient(135deg, #ef4444, #b91c1c); box-shadow: 0 1px 4px rgba(239,68,68,0.2); }
+button.danger:hover { box-shadow: 0 2px 8px rgba(239,68,68,0.3); }
+button.warn { background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 1px 4px rgba(245,158,11,0.2); }
+button.ghost { background: #f5f6f8; color: var(--text); box-shadow: none; border: 1px solid rgba(0,0,0,0.1); }
+button.ghost:hover { background: #ebedf0; }
+
+.small { font-size: 12px; color: var(--text-muted); }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 999px;
+       font-size: 11px; background: #eef0f3; color: var(--text-dim);
+       letter-spacing: 0.5px; }
+.mt { margin-top: 8px; }
+.flex { display: flex; gap: 8px; }
+.flex > * { flex: 1; }
+.hidden { display: none !important; }
+hr { border: none; border-top: 1px solid rgba(0,0,0,0.08); margin: 10px 0; }
+
+/* 角色徽章 */
+.role-badge {
+    display: inline-block; padding: 3px 12px; border-radius: 999px;
+    color: #fff; font-weight: 700; font-size: 13px;
+    letter-spacing: 1px; position: relative;
+}
+.role-wolf     { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+.role-seer     { background: linear-gradient(135deg, #22c55e, #15803d); }
+.role-witch    { background: linear-gradient(135deg, #f59e0b, #b45309); }
+.role-hunter   { background: linear-gradient(135deg, #06b6d4, #0e7490); }
+.role-villager { background: linear-gradient(135deg, #94a3b8, #475569); }
+
+/* 阶段横幅 */
+.phase-banner {
+    padding: 10px 16px; border-radius: 12px;
+    background: linear-gradient(135deg, rgba(91,99,255,0.1), rgba(156,79,196,0.1));
+    border: 1px solid rgba(91,99,255,0.25);
+    color: var(--text); font-weight: 700; letter-spacing: 1px;
+    display: flex; align-items: center; gap: 8px;
+    animation: phaseIn 0.5s ease-out;
+}
+.phase-banner .icon { font-size: 18px; opacity: 0.9; }
+@keyframes phaseIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+body.day-mode .phase-banner { background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.12)); border-color: rgba(245,158,11,0.3); }
+body.vote-mode .phase-banner { background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(185,28,28,0.12)); border-color: rgba(239,68,68,0.3); }
+
+/* 玩家网格 */
+.player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); gap: 8px; }
+.player {
+    padding: 12px 8px; border-radius: 12px; text-align: center;
+    background: #f5f6f8;
+    border: 1px solid rgba(0,0,0,0.06);
+    transition: all 0.25s; position: relative; overflow: hidden;
+}
+.player:hover { transform: translateY(-2px); background: #ebedf0; }
+.player.you {
+    background: linear-gradient(135deg, rgba(91,99,255,0.1), rgba(156,79,196,0.1));
+    border-color: rgba(91,99,255,0.4);
+    box-shadow: 0 0 10px rgba(91,99,255,0.12);
+}
+.player.dead {
+    opacity: 0.5; filter: grayscale(0.7);
+    background: #f5f5f5; border-color: rgba(239,68,68,0.2);
+}
+.player.dead::after {
+    content: '✕'; position: absolute; top: 6px; right: 8px;
+    color: #ef4444; font-weight: bold; font-size: 14px;
+}
+.avatar {
+    width: 38px; height: 38px; border-radius: 50%; margin: 0 auto 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 17px; color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+.player.you .avatar { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+.player.dead .avatar { background: linear-gradient(135deg, #9ca3af, #6b7280); }
+.player .name { font-weight: 600; font-size: 14px; }
+.player .meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* 游戏日志 */
+#log {
+    max-height: 300px; overflow-y: auto; font-size: 14px;
+    padding-right: 4px;
+}
+#log::-webkit-scrollbar, #chat::-webkit-scrollbar { width: 6px; }
+#log::-webkit-scrollbar-track, #chat::-webkit-scrollbar-track { background: transparent; }
+#log::-webkit-scrollbar-thumb, #chat::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.15); border-radius: 3px;
+}
+.msg {
+    padding: 7px 12px; margin: 4px 0; border-radius: 8px;
+    background: #f5f6f8;
+    border-left: 3px solid rgba(0,0,0,0.15);
+    animation: msgIn 0.3s ease-out;
+}
+@keyframes msgIn { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+.msg-system { color: var(--text-dim); border-left-color: rgba(0,0,0,0.2); }
+/* 关键事件：死亡 — 强红、加粗、闪入 + 脉冲 */
+.msg-death {
+    color: #b91c1c; font-weight: 700; font-size: 1.02em;
+    border-left: 4px solid var(--danger);
+    background: rgba(239,68,68,0.12);
+    box-shadow: 0 2px 6px rgba(239,68,68,0.15);
+    animation: deathIn 0.5s cubic-bezier(.2,.8,.2,1), deathPulse 1.6s ease-out 0.5s 1;
+}
+@keyframes deathIn {
+    0%   { opacity: 0; transform: translateX(-14px) scale(0.94); background: rgba(239,68,68,0.38); }
+    60%  { background: rgba(239,68,68,0.22); }
+    100% { opacity: 1; transform: none; background: rgba(239,68,68,0.12); }
+}
+@keyframes deathPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+    100% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+}
+.msg-vote { color: var(--text); border-left-color: var(--accent);
+    background: rgba(91,99,255,0.06); font-weight: 500; white-space: pre-wrap; }
+/* 关键事件：游戏结束 — 渐变、持续呼吸光晕 */
+.msg-end {
+    color: #b45309; font-weight: 800; font-size: 1.12em;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(156,79,196,0.2));
+    border-left: 4px solid var(--warn); border-radius: 10px; margin: 8px 0;
+    animation: endIn 0.6s cubic-bezier(.2,.8,.2,1), endGlow 2.4s ease-in-out infinite;
+}
+@keyframes endIn {
+    0%   { opacity: 0; transform: scale(0.88); }
+    100% { opacity: 1; transform: none; }
+}
+@keyframes endGlow {
+    0%, 100% { box-shadow: 0 0 10px rgba(245,158,11,0.15); }
+    50%      { box-shadow: 0 0 22px rgba(245,158,11,0.45); }
+}
+
+/* 私密消息 */
+.private {
+    background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(91,99,255,0.06));
+    padding: 9px 13px; border-radius: 10px; margin: 5px 0; font-size: 13px;
+    border-left: 3px solid var(--warn); color: #92400e;
+    box-shadow: 0 1px 3px rgba(245,158,11,0.06);
+    animation: msgIn 0.4s ease-out;
+}
+
+/* 聊天 */
+.chat-msg { padding: 4px 0; font-size: 14px; line-height: 1.5; }
+.chat-msg .name { font-weight: 700; color: var(--accent); }
+.chat-msg.dead .name { color: var(--text-muted); text-decoration: line-through; }
+
+/* 目标选择按钮 */
+.target-btn {
+    display: inline-block; margin: 3px; padding: 8px 14px;
+    background: #f5f6f8;
+    border: 1px solid rgba(0,0,0,0.1);
+    color: var(--text); cursor: pointer; border-radius: 10px;
+    font-size: 13px; user-select: none;
+    transition: all 0.15s;
+}
+.target-btn:hover { background: #ebedf0; transform: translateY(-1px); }
+.target-btn.selected {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-color: transparent; color: #fff;
+    box-shadow: 0 2px 8px rgba(91,99,255,0.25); transform: translateY(-1px);
+}
+
+/* 角色卡光晕 */
+#roleCard {
+    position: relative; overflow: hidden;
+}
+#roleCard::before {
+    content: ''; position: absolute; inset: -1px; border-radius: 16px;
+    background: linear-gradient(135deg, rgba(91,99,255,0.15), rgba(156,79,196,0.15));
+    z-index: -1; filter: blur(8px); opacity: 0.4;
+}
+
+/* 登录页 */
+#loginView {
+    max-width: 460px; margin: 12vh auto 0;
+    text-align: center; padding: 32px 28px;
+}
+#loginView h1 { font-size: 2.4em; margin-bottom: 8px; }
+#loginView .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
+.moon { font-size: 48px; margin-bottom: 12px; display: block;
+    filter: drop-shadow(0 0 8px rgba(251,191,36,0.25)); }
+.err-box { color: #dc2626; margin-top: 10px; min-height: 18px; font-size: 13px; }
+.divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--text-muted); font-size: 12px; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(0,0,0,0.1); }
+
+/* 等待动画 */
+.dots::after {
+    content: ''; display: inline-block; width: 16px; text-align: left;
+    animation: dots 1.4s steps(4, end) infinite;
+}
+@keyframes dots { 0%{content:''} 25%{content:'·'} 50%{content:'··'} 75%{content:'···'} 100%{content:''} }
+
+/* 双栏布局（保留旧规则，新布局不再使用） */
+.game-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (max-width: 760px) { .game-grid { grid-template-columns: 1fr; } }
+
+/* 卡片精简（双栏下控制高度） */
+.card { margin: 0; }
+
+/* 文档伪装布局 */
+.doc-topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 8px;
+    padding: 10px 14px; margin-bottom: 12px;
+    background: #fff; border-bottom: 2px solid rgba(0,0,0,0.08);
+}
+.doc-status { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+.doc-status .icon { color: var(--accent); margin-right: 4px; }
+.doc-section {
+    padding: 18px 20px; margin-bottom: 18px;
+    background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 6px;
+}
+.doc-label {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px;
+}
+.doc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.doc-table td {
+    padding: 11px 8px; border-bottom: 1px solid rgba(0,0,0,0.05);
+    vertical-align: middle;
+}
+.doc-table tr:last-child td { border-bottom: none; }
+.doc-table .idx { color: var(--text-muted); width: 28px; font-variant-numeric: tabular-nums; }
+.doc-table .nm { font-weight: 500; }
+.doc-table .nm .you { font-size: 11px; color: var(--accent); margin-left: 4px; }
+.doc-table .st { color: var(--text-muted); font-size: 12px; text-align: right; white-space: nowrap; }
+.doc-table .st.dead { color: #dc2626; }
+.doc-table .st.left { color: var(--text-muted); }
+.doc-table tr.dead td { opacity: 0.5; text-decoration: line-through; }
+.doc-table tr.you td .nm { color: var(--accent); }
+
+/* 主+侧栏布局：主体内容 + 右侧常驻操作记录 */
+/* ponytail: 整页一屏——外层不滚，两栏各自内部滚，主栏最后一个聊天框拉伸到与侧栏记录框底边对齐 */
+html, body { height: 100%; overflow: hidden; }
+#gameView { height: 100%; display: flex; flex-direction: column; }
+.doc-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 340px; gap: 18px; }
+.doc-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.doc-main .doc-section { margin-bottom: 10px; }
+/* 成员表：空间够时自然高度，12 人挤爆时在框内滚动，不把主栏撑出去 */
+#membersSection { min-height: 0; display: flex; flex-direction: column; }
+#membersSection .members-scroll { min-height: 0; overflow-y: auto; }
+#chatSection, #wolfChatSection { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#chatSection #chat, #wolfChatSection #wolfChat { flex: 1; min-height: 0; }
+.doc-side { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.doc-side .doc-section { margin: 0; display: flex; flex-direction: column; min-height: 0; }
+.doc-side .doc-section:last-child { flex: 1; }
+.doc-side #log { flex: 1; overflow-y: auto; max-height: none; min-height: 0; }
+@media (max-width: 900px) {
+    html, body { height: auto; overflow: auto; }
+    #gameView { height: auto; display: block; }
+    .doc-layout { grid-template-columns: 1fr; }
+    .doc-side { position: static; }
+    .doc-side .doc-section:last-child { flex: none; }
+    .doc-side #log { max-height: 300px; }
+    .doc-main { overflow: visible; display: block; }
+    #chatSection, #wolfChatSection { flex: none; }
+    #chat, #wolfChat { max-height: 22vh; min-height: 100px; }
+}
+
+/* Toast 轻提示 */
+#toast {
+    position: fixed; top: 18px; left: 50%; transform: translate(-50%, -10px);
+    background: #dc2626; color: #fff; padding: 10px 18px;
+    border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+    z-index: 1000; opacity: 0; pointer-events: none;
+    transition: opacity 0.22s, transform 0.22s;
+    font-size: 14px; font-weight: 500; max-width: 80vw;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+#toast.info { background: var(--accent); }
+#toast.success { background: #16a34a; }
+
+/* 确认对话框 */
+#modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.28);
+    display: none; align-items: center; justify-content: center; z-index: 999;
+}
+#modal.show { display: flex; }
+#modal .box {
+    background: #fff; border-radius: 12px; padding: 20px 22px;
+    max-width: 320px; box-shadow: 0 8px 28px rgba(0,0,0,0.16);
+}
+#modal .msg { margin: 0 0 16px; font-size: 14px; color: var(--text); line-height: 1.5; }
+#modal .btns { display: flex; gap: 8px; }
+#modal .btns button { flex: 1; }
+</style>
+</head>
+<body>
+
+<div id="loginView" class="card">
+    <span class="moon">☾</span>
+    <h1>办公文档</h1>
+    <p class="subtitle">内网多人文字狼人杀 · 4-12 人局<br>狼人 / 预言家 / 女巫 / 猎人 / 村民<br>进入房间后自动分配 1号 2号 编号</p>
+    <button onclick="createRoom()" class="success mt" style="width:100%">创建新房间</button>
+    <div class="divider">或 加入已有房间</div>
+    <div class="flex">
+        <input type="text" id="joinIdInput" placeholder="6位房间号" maxlength="6"
+               onkeydown="if(event.key==='Enter')joinRoom()" style="text-transform:uppercase">
+        <button onclick="joinRoom()" class="ghost">加入</button>
+    </div>
+    <div id="errBox" class="err-box"></div>
+</div>
+
+<div id="gameView" class="hidden">
+    <div class="doc-topbar">
+        <div>
+            <h1 style="margin:0">办公文档</h1>
+            <div id="phaseInfo" class="doc-status"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+            <span class="small">会议号 <span id="roomInfo" class="tag"></span></span>
+            <button onclick="quitGame()" class="ghost" style="padding:6px 12px;font-size:13px;color:#dc2626">离开</button>
+        </div>
+    </div>
+
+    <div class="doc-layout">
+        <main class="doc-main">
+            <div class="doc-section" id="roleCard">
+                <div class="doc-label">资料</div>
+                <div id="roleInfo"></div>
+                <div id="privateInfo"></div>
+            </div>
+
+            <div class="doc-section" id="membersSection">
+                <div class="doc-label">成员</div>
+                <div class="members-scroll"><table class="doc-table" id="playersList"></table></div>
+            </div>
+
+            <div class="doc-section" id="chatSection">
+                <div class="doc-label">批注</div>
+                <div id="chat" style="overflow-y:auto;margin-bottom:8px;font-size:14px"></div>
+                <div class="flex">
+                    <input type="text" id="chatInput" placeholder="添加批注（Enter 发送）" maxlength="200"
+                           onkeydown="if(event.key==='Enter')sendChat()">
+                    <button id="chatSend" onclick="sendChat()" class="ghost">发送</button>
+                </div>
+            </div>
+
+            <div class="doc-section hidden" id="wolfChatSection">
+                <div class="doc-label" style="color:#b91c1c">🐺 狼人频道（仅同伴可见）</div>
+                <div id="wolfChat" style="overflow-y:auto;margin-bottom:8px;font-size:14px"></div>
+                <div class="flex">
+                    <input type="text" id="wolfChatInput" placeholder="对同伴说话（Enter 发送）" maxlength="200"
+                           onkeydown="if(event.key==='Enter')sendWolfChat()">
+                    <button id="wolfChatSend" onclick="sendWolfChat()" class="danger">发送</button>
+                </div>
+            </div>
+        </main>
+
+        <aside class="doc-side">
+            <div class="doc-section" id="actionCard">
+                <div class="doc-label">操作</div>
+                <div id="actionPanel"></div>
+            </div>
+            <div class="doc-section">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div class="doc-label" style="margin:0">操作记录</div>
+                    <button onclick="clearLog()" class="ghost" style="padding:4px 10px;font-size:12px">清空</button>
+                </div>
+                <div id="log" style="margin-top:6px"></div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<div id="toast"></div>
+<div id="modal"><div class="box"><p class="msg"></p><div class="btns"><button class="ghost" id="modalNo">取消</button><button id="modalYes">确定</button></div></div></div>
+
+<script>
+let token = localStorage.getItem('ww_token') || '';
+let roomId = localStorage.getItem('ww_room') || '';
+let since = 0, chatSince = 0, wolfChatSince = 0;
+let selected = {};
+let pollTimer = null;
+let lastPhase = null;
+let privateHistory = [];   // ponytail: 累积私密消息，避免被服务器 pop 后下次轮询清空
+let lastRoleHtml = '';     // 缓存身份区 DOM，避免每轮询重建触发动画闪烁
+let lastPrivCount = 0;     // 缓存私密区长度，仅在新增时重建
+
+function $ (id) { return document.getElementById(id); }
+function showErr(m) { $('errBox').textContent = m || ''; }
+// ponytail: 用 toast 取代 alert，confirmDialog 取代 confirm
+function toast(msg, type) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'show' + (type ? ' ' + type : '');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.className = ''; }, 2500);
+}
+function confirmDialog(msg, onYes) {
+    const m = $('modal');
+    m.querySelector('.msg').textContent = msg;
+    m.classList.add('show');
+    const yes = $('modalYes'), no = $('modalNo');
+    const cleanup = () => { m.classList.remove('show'); yes.onclick = null; no.onclick = null; };
+    yes.onclick = () => { cleanup(); onYes(); };
+    no.onclick = cleanup;
+}
+function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function roleName(r) {
+    return {wolf:'狼人',seer:'预言家',witch:'女巫',hunter:'猎人',villager:'村民'}[r] || r;
+}
+async function post(url, body) {
+    try {
+        const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+        return await r.json();
+    } catch(e) { return {error: e.message}; }
+}
+
+async function createRoom() {
+    showErr('');
+    const r = await post('/api/create', {});
+    if (r.error) return showErr(r.error);
+    token = r.token; roomId = r.roomId;
+    localStorage.setItem('ww_token', token);
+    localStorage.setItem('ww_room', roomId);
+    enterGame();
+}
+
+async function joinRoom() {
+    const rid = $('joinIdInput').value.trim();
+    if (!rid) return showErr('请填写房间号');
+    showErr('');
+    const r = await post('/api/join', {roomId: rid});
+    if (r.error) return showErr(r.error);
+    token = r.token; roomId = r.roomId;
+    localStorage.setItem('ww_token', token);
+    localStorage.setItem('ww_room', roomId);
+    enterGame();
+}
+
+function enterGame() {
+    $('loginView').classList.add('hidden');
+    $('gameView').classList.remove('hidden');
+    $('roomInfo').textContent = '房间号 ' + roomId + '（分享给其他玩家加入）';
+    poll();
+}
+
+function leaveGame() {
+    localStorage.removeItem('ww_token');
+    localStorage.removeItem('ww_room');
+    token = ''; roomId = '';
+    if (pollTimer) clearTimeout(pollTimer);
+    location.reload();
+}
+
+function quitGame() {
+    confirmDialog('确定离开会议？进行中离开将视为放弃。', async () => {
+        try { await post('/api/action', {token, type: 'leave'}); } catch(e) {}
+        leaveGame();
+    });
+}
+
+// ponytail: poll 单飞 + 排队，避免 fetch 在途时 kickPoll 触发并发轮询，
+// 两条 fetch 用同一个 since 拿到同一批消息各自 render → 消息显示两次
+let pollInFlight = false;
+let pollQueued = false;
+function schedulePoll(delay) {
+    if (pollTimer) clearTimeout(pollTimer);
+    pollTimer = setTimeout(poll, delay);
+}
+async function poll() {
+    if (pollInFlight) { pollQueued = true; return; }
+    pollInFlight = true;
+    try {
+        const url = `/api/state?token=${encodeURIComponent(token)}&since=${since}&chatSince=${chatSince}&wolfChatSince=${wolfChatSince}`;
+        const r = await fetch(url);
+        const d = await r.json();
+        if (d.error === 'room_not_found') { leaveGame(); return; }
+        // ponytail: 被房主踢出/已标记 left，弹提示后自动登出回登录页
+        if (d.error === 'kicked') { toast('你已被房主踢出'); setTimeout(leaveGame, 800); return; }
+        if (!d.error) render(d);
+    } catch(e) {}
+    finally {
+        pollInFlight = false;
+        schedulePoll(pollQueued ? 0 : 1500);
+        pollQueued = false;
+    }
+}
+function kickPoll() { schedulePoll(0); }
+
+let lastState = null;        // 缓存最近一次 state，供本地 1s 倒计时重绘横幅用
+function render(s) {
+    lastState = s;
+    // 公共日志（增量）
+    if (s.log && s.log.length) {
+        const logDiv = $('log');
+        for (const m of s.log) {
+            const el = document.createElement('div');
+            el.className = 'msg msg-' + m.type;
+            el.textContent = m.text;
+            logDiv.appendChild(el);
+            since = Math.max(since, m.id);
+        }
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+    // 聊天（增量）
+    if (s.chat && s.chat.length) {
+        const c = $('chat');
+        for (const m of s.chat) {
+            const el = document.createElement('div');
+            el.className = 'chat-msg' + (m.alive === false ? ' dead' : '');
+            el.innerHTML = '<span class="name">' + escapeHtml(m.name) + ':</span> ' + escapeHtml(m.text);
+            c.appendChild(el);
+            chatSince = Math.max(chatSince, m.id);
+        }
+        c.scrollTop = c.scrollHeight;
+    }
+    // 狼人频道（增量，仅狼能看到 s.wolf_chat）
+    if (s.wolf_chat && s.wolf_chat.length) {
+        const wc = $('wolfChat');
+        for (const m of s.wolf_chat) {
+            const el = document.createElement('div');
+            el.className = 'chat-msg';
+            el.innerHTML = '<span class="name" style="color:#b91c1c">' + escapeHtml(m.name) + ':</span> ' + escapeHtml(m.text);
+            wc.appendChild(el);
+            wolfChatSince = Math.max(wolfChatSince, m.id);
+        }
+        wc.scrollTop = wc.scrollHeight;
+    }
+    // 玩家列表（表格行）
+    const pl = $('playersList');
+    let html = '<tbody>';
+    s.players.forEach((p, i) => {
+        const trCls = (p.alive ? '' : 'dead') + (p.isYou ? ' you' : '');
+        let stTxt, stCls;
+        if (s.phase === 'waiting') {
+            // 等待阶段显示准备状态
+            if (p.isYou && s.isHost) { stTxt = '房主'; stCls = ''; }
+            else if (p.ready) { stTxt = '已准备 ✓'; stCls = ''; }
+            else { stTxt = '未准备'; stCls = 'left'; }
+        } else {
+            stTxt = p.left ? '已离开' : (p.spectator ? '旁观' : (!p.alive ? '出局' : '在线'));
+            stCls = p.left ? 'left' : (p.spectator ? 'left' : (!p.alive ? 'dead' : ''));
+        }
+        let nm = escapeHtml(p.name) + (p.isYou ? '<span class="you">（你）</span>' : '');
+        if (p.role) nm += ' <span class="role-badge role-' + p.role + '" style="font-size:10px;padding:1px 6px">' + roleName(p.role) + '</span>';
+        // ponytail: 房主可在任意阶段踢人（除自己、已离开的）
+        if (s.isHost && !p.isYou && !p.left) {
+            nm += ` <button onclick="kickPlayer('${escapeHtml(p.token)}')" class="ghost" style="padding:2px 8px;font-size:11px;color:#dc2626;margin-left:6px;border-color:rgba(239,68,68,0.3)">踢出</button>`;
+        }
+        html += `<tr class="${trCls}"><td class="idx">${i+1}</td><td class="nm">${nm}</td><td class="st ${stCls}">${stTxt}</td></tr>`;
+    });
+    pl.innerHTML = html + '</tbody>';
+    // 身份
+    const roleDiv = $('roleInfo');
+    let roleHtml;
+    if (s.myRole) {
+        roleHtml = '<span class="role-badge role-' + s.myRole + '">' + s.myRoleName + '</span> '
+                 + '<span class="small">' + escapeHtml(s.myRoleDesc || '') + '</span>';
+        if (s.teammates && s.teammates.length) {
+            roleHtml += '<div class="small mt">狼人同伴：<b>' + s.teammates.map(escapeHtml).join('、') + '</b></div>';
+        }
+        if (!s.myAlive) roleHtml += ' <span class="tag" style="background:#ef4444;color:#fff">已出局</span>';
+    } else if (s.phase === 'waiting') {
+        roleHtml = '<span class="small">等待房主开始游戏...</span>';
+    } else {
+        roleHtml = '';
+    }
+    if (roleHtml !== lastRoleHtml) {
+        roleDiv.innerHTML = roleHtml;
+        lastRoleHtml = roleHtml;
+    }
+    // 私密信息（累积显示，仅在新增时重建 DOM，避免每轮询重播入场动画导致闪烁）
+    const privDiv = $('privateInfo');
+    if (s.private && s.private.length) {
+        for (const t of s.private) privateHistory.push(t);
+    }
+    if (privateHistory.length !== lastPrivCount) {
+        privDiv.innerHTML = privateHistory.map(t => '<div class="private">' + escapeHtml(t) + '</div>').join('');
+        lastPrivCount = privateHistory.length;
+    }
+    // 阶段
+    $('phaseInfo').innerHTML = phaseText(s);
+    // 操作
+    renderActions(s);
+    // 发言权限：白天两阶段（轮流发言仅当前发言人 / 自由讨论限 2 分钟）+ 投票阶段全员
+    let chatOpen = false, chatHint = '';
+    if (s.phase === 'vote') {
+        chatOpen = s.myAlive || s.mySpectator;
+        chatHint = '添加批注（Enter 发送）';
+    } else if (s.phase === 'day') {
+        if (s.dayStage === 'speak') {
+            chatOpen = !!s.isCurrentSpeaker;
+            chatHint = chatOpen ? '轮到你发言，说完点「发言结束」' : `等待 ${s.currentSpeaker || ''} 发言`;
+        } else if (s.dayStage === 'free') {
+            const left = s.freeDeadline ? Math.max(0, Math.floor(s.freeDeadline - Date.now()/1000)) : 0;
+            chatOpen = left > 0 && (s.myAlive || s.mySpectator);
+            chatHint = left > 0 ? `自由讨论，剩余 ${left}s` : '自由讨论已结束，可发起投票';
+        }
+    }
+    if (!chatOpen && !chatHint) {
+        chatHint = (!s.myAlive && !s.mySpectator && s.phase !== 'day') ? '已出局，无法发言' : '当前阶段不能发言';
+    }
+    $('chatInput').disabled = !chatOpen;
+    $('chatSend').disabled = !chatOpen;
+    $('chatInput').placeholder = chatHint;
+    // 狼人频道：仅狼能看到区块（死狼只读）；任意阶段可发，死了不能发
+    const isWolf = s.myRole === 'wolf';
+    $('wolfChatSection').classList.toggle('hidden', !isWolf);
+    if (isWolf) {
+        $('wolfChatInput').disabled = !s.myAlive;
+        $('wolfChatSend').disabled = !s.myAlive;
+        $('wolfChatInput').placeholder = s.myAlive ? '对同伴说话（Enter 发送）' : '已出局，只能看不能发';
+    }
+    // 阶段切换时清空选择
+    if (lastPhase !== s.phase) {
+        selected = {};
+        // ponytail: 回到等待阶段（重新开局），清空本地日志和聊天
+        if (s.phase === 'waiting') {
+            $('log').innerHTML = '';
+            $('chat').innerHTML = '';
+            $('wolfChat').innerHTML = '';
+            since = 0;
+            chatSince = 0;
+            wolfChatSince = 0;
+            privateHistory = [];
+            lastRoleHtml = '';
+            lastPrivCount = 0;
+        }
+        lastPhase = s.phase;
+    }
+}
+
+function phaseText(s) {
+    // 自由讨论倒计时（秒），随 poll 1.5s 刷新
+    const left = (s.phase === 'day' && s.dayStage === 'free' && s.freeDeadline)
+        ? Math.max(0, Math.ceil(s.freeDeadline - Date.now()/1000)) : 0;
+    const m = {
+        'waiting':     { icon: '◐', text: '等待玩家加入', cls: '' },
+        'night_wolf':  { icon: '☾', text: '夜晚 · 狼人行动', cls: '' },
+        'night_seer':  { icon: '☾', text: '夜晚 · 预言家行动', cls: '' },
+        'night_witch': { icon: '☾', text: '夜晚 · 女巫行动', cls: '' },
+        'day':         { icon: '☀', text: '第 ' + s.day + ' 天 · '
+                          + (s.dayStage === 'speak' ? `${s.currentSpeaker || ''} 发言中`
+                          : s.dayStage === 'free' ? (left > 0 ? `自由讨论 · 剩余 ${left}s`
+                          : '自由讨论') : '白天讨论'), cls: 'day-mode' },
+        'hunter':      { icon: '◉', text: '猎人开枪', cls: '' },
+        'vote':        { icon: '⚖', text: '投票阶段', cls: 'vote-mode' },
+        'ended':       { icon: '★', text: '游戏结束', cls: 'end-mode' },
+    }[s.phase] || { icon: '·', text: s.phase, cls: '' };
+    // 切换 body 氛围
+    document.body.className = m.cls;
+    return '<span class="icon">' + m.icon + '</span> ' + m.text;
+}
+// ponytail: 自由讨论倒计时本地每秒重绘（时间取自服务器绝对时间戳，不会累计漂移）
+setInterval(() => {
+    if (lastState && lastState.phase === 'day' && lastState.dayStage === 'free'
+        && lastState.freeDeadline) {
+        $('phaseInfo').innerHTML = phaseText(lastState);
+    }
+}, 1000);
+
+function renderActions(s) {
+    const panel = $('actionPanel');
+    let html = '';
+    if (s.phase === 'ended') {
+        html = '<span class="small">会议已结束。</span> '
+             + (s.isHost ? '<button onclick="confirmReset()" class="warn">重置会议</button>' : '');
+    } else if (s.mySpectator) {
+        html = '<span class="small">你是旁观者，观战中（评论区可发言）。</span>';
+    } else if (!s.myAlive && s.phase !== 'hunter') {
+        html = '<span class="small">你已出局，观战中。</span>';
+    } else {
+        for (const a of (s.actions || [])) {
+            if (a.type === 'start_game') {
+                html += `<button onclick="doAction('start_game')" class="success">开始会议</button>`;
+            } else if (a.type === 'toggle_ready') {
+                if (a.ready) {
+                    html += `<button onclick="doAction('toggle_ready')" class="ghost">取消准备</button>`;
+                } else {
+                    html += `<button onclick="doAction('toggle_ready')" class="success">准备</button>`;
+                }
+            } else if (a.type === 'wolf_pick') {
+                html += '<div class="small">选择今晚击杀的目标（可点自己=自杀）：</div>';
+                html += renderTargets(a.targets, 'wolf');
+                html += `<div class="mt"><button onclick="wolfSubmit()">确认击杀</button>`;
+                if (a.can_skip) html += ` <button onclick="wolfSkip()" class="ghost">不杀</button>`;
+                html += `</div>`;
+            } else if (a.type === 'seer_check') {
+                html += '<div class="small">选择要查验的目标：</div>';
+                html += renderTargets(a.targets, 'seer');
+                html += `<div class="mt"><button onclick="seerSubmit()">确认查验</button></div>`;
+            } else if (a.type === 'witch_act') {
+                html += '<div class="witch">';
+                if (a.witch_save_used) {
+                    html += '<div class="small">解药已用完。</div>';
+                } else if (a.save_target) {
+                    html += `<div class="small">今晚 ${escapeHtml(a.save_target.name)} 被狼人袭击。</div>`;
+                    html += renderToggle('witch_save', '使用解药救人');
+                } else {
+                    html += '<div class="small">今晚无人被狼人袭击，无法使用解药。</div>';
+                }
+                if (a.witch_poison_used) {
+                    html += '<div class="small">毒药已用完。</div>';
+                } else {
+                    html += '<div class="small mt">使用毒药（可选）：</div>';
+                    html += renderTargets(a.poison_targets, 'witch_poison', true);
+                }
+                html += `<div class="mt"><button onclick="witchSubmit()">确认</button></div>`;
+                html += '</div>';
+            } else if (a.type === 'hunter_shoot') {
+                html += '<div class="small">选择要带走的玩家（可不选）：</div>';
+                html += renderTargets(a.targets, 'hunter', true);
+                html += `<div class="mt"><button onclick="hunterSubmit()">确认</button></div>`;
+            } else if (a.type === 'end_speech') {
+                html += `<button onclick="doAction('end_speech')" class="success">发言结束</button>`;
+            } else if (a.type === 'start_vote') {
+                html += `<button onclick="doAction('start_vote')" class="danger">发起评审</button>`;
+            } else if (a.type === 'cast_vote') {
+                html += '<div class="small">选择需要标记的对象：</div>';
+                html += renderTargets(a.targets, 'vote', true);
+                html += `<div class="mt"><button onclick="voteSubmit()">提交</button> `;
+                html += `<button onclick="doAction('cast_vote', null)" class="warn">跳过</button></div>`;
+            }
+        }
+        // 房主兜底：随时可重置
+        if (s.isHost && s.phase !== 'waiting') {
+            html += `<hr style="margin:8px 0;border:none;border-top:1px solid #eee">
+                     <button onclick="confirmReset()" class="warn">重置会议</button>`;
+        }
+    }
+    if (!html) html = '<span class="small dots">等待其他玩家操作</span>';
+    panel.innerHTML = html;
+}
+
+function renderTargets(targets, key, optional) {
+    let html = '<div class="mt">';
+    for (const t of targets) {
+        const sel = selected[key] === t.token ? ' selected' : '';
+        html += `<span class="target-btn${sel}" data-key="${key}" data-val="${escapeHtml(t.token)}" `
+              + `onclick="pickTarget(this,'${key}','${escapeHtml(t.token)}')">${escapeHtml(t.name)}</span>`;
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderToggle(key, label) {
+    const sel = selected[key] ? ' selected' : '';
+    return `<div class="mt"><span class="target-btn${sel}" data-key="${key}" onclick="togglePick(this,'${key}')">${label}</span></div>`;
+}
+
+function pickTarget(el, key, val) {
+    document.querySelectorAll(`.target-btn[data-key="${key}"]`).forEach(e => e.classList.remove('selected'));
+    el.classList.add('selected');
+    selected[key] = val;
+}
+
+function togglePick(el, key) {
+    if (selected[key]) {
+        el.classList.remove('selected');
+        delete selected[key];
+    } else {
+        el.classList.add('selected');
+        selected[key] = true;
+    }
+}
+
+async function doAction(type, target) {
+    const body = {token, type};
+    if (target !== undefined) body.target = target;
+    const r = await post('/api/action', body);
+    if (r.error) toast(r.error);
+    selected = {};
+    kickPoll();
+}
+function confirmReset() {
+    confirmDialog('确定重置会议？所有进度将丢失。', () => doAction('reset'));
+}
+function kickPlayer(t) {
+    confirmDialog('确定踢出该玩家？', () => doAction('kick', t));
+}
+async function wolfSubmit() {
+    if (!selected.wolf) { toast('请先选择目标'); return; }
+    await doAction('wolf_pick', selected.wolf);
+}
+async function wolfSkip() {
+    selected = {};
+    await doAction('wolf_pick', null);
+}
+async function seerSubmit() {
+    if (!selected.seer) { toast('请先选择目标'); return; }
+    await doAction('seer_check', selected.seer);
+}
+async function witchSubmit() {
+    const save = !!selected.witch_save;
+    const poison = selected.witch_poison || null;
+    const r = await post('/api/action', {token, type:'witch_act', save, poison});
+    if (r.error) toast(r.error);
+    selected = {};
+    kickPoll();
+}
+async function hunterSubmit() {
+    const t = selected.hunter || null;
+    await doAction('hunter_shoot', t);
+}
+async function voteSubmit() {
+    if (!selected.vote) { toast('请先选择对象，或点"跳过"'); return; }
+    await doAction('cast_vote', selected.vote);
+}
+async function sendChat() {
+    const input = $('chatInput');
+    if (input.disabled) return;  // ponytail: 兜底，防止死后残留文本被点发送
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    await post('/api/action', {token, type:'chat', text});
+}
+// ponytail: sendChat 的 disabled 兜底已经覆盖 spectator 边界，无需额外判断
+async function sendWolfChat() {
+    const input = $('wolfChatInput');
+    if (input.disabled) return;
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    await post('/api/action', {token, type:'wolf_chat', text});
+}
+
+function clearLog() {
+    $('log').innerHTML = '';
+}
+
+// 自动恢复登录（网络瞬断自动重试 2 次，避免无谓掉到登录页）
+async function tryRestore(attempt) {
+    if (!token || !roomId) return;
+    try {
+        const r = await fetch(`/api/state?token=${encodeURIComponent(token)}&since=0&chatSince=0&wolfChatSince=0`);
+        const d = await r.json();
+        if (!d.error) {
+            $('loginView').classList.add('hidden');
+            $('gameView').classList.remove('hidden');
+            $('roomInfo').textContent = '会议号 ' + roomId;
+            poll();
+        } else {
+            localStorage.removeItem('ww_token');
+            localStorage.removeItem('ww_room');
+        }
+    } catch (e) {
+        if (attempt < 2) setTimeout(() => tryRestore(attempt + 1), 1200);
+    }
+}
+tryRestore(0);
+</script>
+</body>
+</html>
