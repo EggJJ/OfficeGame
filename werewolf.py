@@ -119,6 +119,7 @@ class Room:
         # 其他
         self.winner = None             # 'wolf' / 'good'
         self.hunter_token = None       # 等待开枪的猎人 token
+        self.role_counts = None        # 房主自定义配置 {'wolf','seer','witch','hunter'}，None=按人数默认
         self.created_at = time.time()
 
     def _gen_id(self):
@@ -156,14 +157,44 @@ class Room:
 # ============================================================
 # 游戏流程
 # ============================================================
+def effective_role_counts(room):
+    """当前生效的角色配置（不含村民）。房主没动过就按人数取默认表。"""
+    if room.role_counts:
+        return dict(room.role_counts)
+    # 人还没到 4 时表里没有，先给个能显示的默认，开局时再严格校验
+    cfg = ROLE_CONFIGS.get(len(room.players), ['wolf', 'seer'])
+    return {r: cfg.count(r) for r in ('wolf', 'seer', 'witch', 'hunter')}
+
+
+def validate_role_counts(c, n):
+    """边界：狼 1~n-2；神职各 0/1 且至少留一个；角色总数不超人数。
+    神职限 1 是机制约束：女巫的药、猎人的枪都是房间级单份。"""
+    if not (1 <= c['wolf'] <= max(n - 2, 1)):
+        return f'狼人数量需在 1~{max(n - 2, 1)} 之间'
+    if any(c[r] not in (0, 1) for r in ('seer', 'witch', 'hunter')):
+        return '神职（预言家/女巫/猎人）各最多 1 个'
+    if c['seer'] + c['witch'] + c['hunter'] < 1:
+        return '至少保留一个神职，否则无神可屠会直接判狼胜'
+    if sum(c.values()) > n:
+        return '角色总数超过玩家人数'
+    return None
+
+
 def start_game(room):
     n = len(room.players)
-    roles = list(ROLE_CONFIGS[n])
+    c = effective_role_counts(room)
+    err = validate_role_counts(c, n)
+    if err:
+        raise GameError(err)
+    roles = (['wolf'] * c['wolf'] + ['seer'] * c['seer'] + ['witch'] * c['witch']
+             + ['hunter'] * c['hunter'] + ['villager'] * (n - sum(c.values())))
     random.shuffle(roles)
     for p, r in zip(room.players.values(), roles):
         p.role = r
     room.day = 1
-    room.add_msg('system', f'游戏开始！共 {n} 人。')
+    comp = '、'.join(f'{ROLE_NAMES[r]}×{c[r]}' for r in ('wolf', 'seer', 'witch', 'hunter')
+                     if c[r]) + f'、村民×{n - sum(c.values())}'
+    room.add_msg('system', f'游戏开始！共 {n} 人。本局配置：{comp}')
     # 给每个玩家发一条私密消息，宣告身份
     for p in room.players.values():
         room.add_private(p.token, f'你的身份：{ROLE_NAMES[p.role]}。{ROLE_DESCS[p.role]}')
@@ -539,11 +570,13 @@ def get_state(room, token):
                      if pl.role == 'wolf' and pl.token != token]
         if not teammates:
             teammates = None
+    c = effective_role_counts(room)
     return {
         'roomId': room.id,
         'phase': room.phase,
         'day': room.day,
         'isHost': room.host == token,
+        'roleCounts': {**c, 'villager': len(room.players) - sum(c.values())},
         'players': players,
         'myRole': p.role,
         'myRoleName': ROLE_NAMES.get(p.role),
@@ -574,9 +607,10 @@ def get_available_actions(room, token):
         others = [pl for t, pl in room.players.items() if t != token]
         all_ready = bool(others) and all(pl.ready for pl in others)
         if is_host:
+            acts = [{'type': 'role_setup'}]
             if all_ready and len(room.players) in ROLE_CONFIGS:
-                return [{'type': 'start_game'}]
-            return []
+                acts.append({'type': 'start_game'})
+            return acts
         return [{'type': 'toggle_ready', 'ready': p.ready}]
     # 已死亡（且不是正在开枪的猎人），观战
     if not p.alive and room.phase != 'hunter':
@@ -871,6 +905,25 @@ class Handler(BaseHTTPRequestHandler):
             return None
         if act == 'toggle_ready':
             p.ready = not p.ready
+            return None
+        if act == 'set_role':
+            if room.host != token or room.phase != 'waiting':
+                return '只有房主在等待阶段可配置角色'
+            role, delta = data.get('role'), int(data.get('delta', 0))
+            if role not in ('wolf', 'seer', 'witch', 'hunter') or delta not in (1, -1):
+                return '参数无效'
+            c = effective_role_counts(room)
+            c[role] += delta
+            # 按当前人数（不足 4 按 4 算）校验，开局时还会按最终人数再校验一次
+            err = validate_role_counts(c, max(len(room.players), MIN_PLAYERS))
+            if err:
+                return err
+            room.role_counts = c
+            return None
+        if act == 'reset_roles':
+            if room.host != token or room.phase != 'waiting':
+                return '只有房主在等待阶段可配置角色'
+            room.role_counts = None   # 回到按人数的默认配置
             return None
         if act == 'start_game':
             if room.host != token:

@@ -18,17 +18,44 @@ def make_room(n):
 
 
 def run_start_case():
-    """开局：角色配置正确，直接进狼人夜。"""
-    room = make_room(6)
-    for t in list(room.players)[1:]:
-        room.players[t].ready = True
+    """开局：4~12 全部人数档，角色配置正确，直接进狼人夜。"""
+    from collections import Counter
+    for n in range(4, 13):
+        room = make_room(n)
+        ww.start_game(room)
+        roles = [p.role for p in room.players.values()]
+        assert room.phase == 'night_wolf', f'{n} 人 start 后应进 night_wolf, 实际 {room.phase}'
+        assert Counter(roles) == Counter(ww.ROLE_CONFIGS[n]), \
+            f'{n} 人局角色配错: {sorted(roles)}'
+        assert all(room.private_log[t] for t in room.players), f'{n} 人局有人没收到身份'
+    print('  4~12 人默认配置 OK')
+
+
+def run_custom_roles_case():
+    """房主自定义角色配置：生效、开局播报、边界被拒。"""
+    room = make_room(7)
+    room.role_counts = {'wolf': 3, 'seer': 1, 'witch': 1, 'hunter': 0}
     ww.start_game(room)
     roles = [p.role for p in room.players.values()]
-    assert room.phase == 'night_wolf', f'start 后应进 night_wolf, 实际 {room.phase}'
-    assert roles.count('wolf') == 2 and roles.count('seer') == 1 \
-        and roles.count('witch') == 1, f'6 人局角色配错: {roles}'
-    # 每人都有私密身份消息
-    assert all(room.private_log[t] for t in room.players), '有人没收到身份'
+    assert roles.count('wolf') == 3 and roles.count('villager') == 2, \
+        f'自定义 7 人 3 狼配置错误: {roles}'
+    assert any('本局配置' in m['text'] for m in room.public_log), '开局应播报配置'
+
+    # 边界：狼 0 / 狼过多 / 神职全删 / 神职 >1，都应被拒
+    for bad, why in [
+        ({'wolf': 0, 'seer': 1, 'witch': 1, 'hunter': 0}, '狼为 0'),
+        ({'wolf': 6, 'seer': 1, 'witch': 1, 'hunter': 0}, '狼太多'),
+        ({'wolf': 2, 'seer': 0, 'witch': 0, 'hunter': 0}, '无神职'),
+        ({'wolf': 2, 'seer': 2, 'witch': 1, 'hunter': 0}, '双预言家'),
+    ]:
+        c = {**bad}
+        err = ww.validate_role_counts(c, 7)
+        assert err, f'{why} 应被拒绝'
+    # 恢复默认：清空自定义后回到人数默认表
+    room.role_counts = None
+    c = ww.effective_role_counts(room)
+    assert c == {'wolf': 2, 'seer': 1, 'witch': 1, 'hunter': 0}, f'恢复默认错误: {c}'
+    print('  自定义角色配置/边界/恢复默认 OK')
 
 
 def run_day_leave_case():
@@ -72,6 +99,7 @@ def run_waiting_leave_case():
 def main():
     run_start_case()
     print('  开局配置 OK')
+    run_custom_roles_case()
     run_day_leave_case()
     run_waiting_leave_case()
     print('PASS')

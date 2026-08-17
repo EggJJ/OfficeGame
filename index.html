@@ -19,15 +19,17 @@ html, body { margin: 0; padding: 0; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
     max-width: 1200px; margin: 0 auto; padding: 12px;
-    background: #ffffff;
+    background: #f3f4f8;
+    background-image: linear-gradient(180deg, #f8f9fc 0%, #f0f2f7 100%);
     color: var(--text);
     min-height: 100vh;
     transition: background 1.2s ease;
+    -webkit-font-smoothing: antialiased;
 }
-/* ponytail: 白底办公风，阶段切换只做淡色提示 */
-body.day-mode { background: #fffaf0; }
-body.vote-mode { background: #fff5f5; }
-body.end-mode { background: #f6f8ff; }
+/* ponytail: 办公风淡彩底，阶段切换只做轻微色温变化 */
+body.day-mode  { background-image: linear-gradient(180deg, #fffdf5 0%, #faf3e6 100%); }
+body.vote-mode { background-image: linear-gradient(180deg, #fff6f6 0%, #fdeded 100%); }
+body.end-mode  { background-image: linear-gradient(180deg, #f7f9ff 0%, #edf0fa 100%); }
 
 #loginView, #gameView { position: relative; z-index: 1; }
 h1 { font-size: 1.6em; margin: 4px 0; font-weight: 700; color: var(--accent);
@@ -39,7 +41,7 @@ h2 { font-size: 0.95em; margin: 0 0 10px; color: var(--text-dim);
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: 16px; padding: 16px 18px; margin: 10px 0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.07);
     animation: rise 0.4s ease-out;
 }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -95,12 +97,36 @@ hr { border: none; border-top: 1px solid rgba(0,0,0,0.08); margin: 10px 0; }
 .role-witch    { background: linear-gradient(135deg, #f59e0b, #b45309); }
 .role-hunter   { background: linear-gradient(135deg, #06b6d4, #0e7490); }
 .role-villager { background: linear-gradient(135deg, #94a3b8, #475569); }
+/* 伪装：狼人自己的身份徽章游戏中用中性灰，别让人扫一眼颜色就露馅 */
+.role-badge.stealth { background: linear-gradient(135deg, #94a3b8, #475569); }
+
+/* 角色配置卡片（等待阶段房主用） */
+.role-cfg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 8px 0; }
+.role-cfg { padding: 10px 6px 8px; border-radius: 12px; text-align: center;
+    background: #f5f6f8; border: 1px solid rgba(0,0,0,0.06); }
+.role-cfg .cnt { font-size: 22px; font-weight: 800; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
+.role-cfg .btns { display: flex; justify-content: center; gap: 6px; }
+.step-btn { width: 32px; height: 26px; line-height: 24px; border-radius: 8px; cursor: pointer;
+    background: #fff; border: 1px solid rgba(0,0,0,0.12); font-weight: 700;
+    color: var(--text-dim); user-select: none; }
+.step-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.role-cfg .auto { font-size: 11px; color: var(--text-muted); }
+
+/* 细滚动条（所有内部滚动区） */
+.members-scroll, #chat, #wolfChat, #roleCard, #log { scrollbar-width: thin; }
+.members-scroll::-webkit-scrollbar, #chat::-webkit-scrollbar, #wolfChat::-webkit-scrollbar,
+#roleCard::-webkit-scrollbar, #log::-webkit-scrollbar { width: 6px; }
+.members-scroll::-webkit-scrollbar-thumb, #chat::-webkit-scrollbar-thumb, #wolfChat::-webkit-scrollbar-thumb,
+#roleCard::-webkit-scrollbar-thumb, #log::-webkit-scrollbar-thumb {
+    background: rgba(15,23,42,0.16); border-radius: 3px;
+}
 
 /* 阶段横幅 */
 .phase-banner {
     padding: 10px 16px; border-radius: 12px;
     background: linear-gradient(135deg, rgba(91,99,255,0.1), rgba(156,79,196,0.1));
     border: 1px solid rgba(91,99,255,0.25);
+    box-shadow: 0 2px 8px rgba(15,23,42,0.05);
     color: var(--text); font-weight: 700; letter-spacing: 1px;
     display: flex; align-items: center; gap: 8px;
     animation: phaseIn 0.5s ease-out;
@@ -207,8 +233,9 @@ body.vote-mode .phase-banner { background: linear-gradient(135deg, rgba(239,68,6
     animation: msgIn 0.4s ease-out;
 }
 
-/* 聊天 */
-.chat-msg { padding: 4px 0; font-size: 14px; line-height: 1.5; }
+/* 聊天：轻气泡，长对话更好读 */
+.chat-msg { padding: 5px 10px; margin: 2px 0; font-size: 14px; line-height: 1.5;
+    border-radius: 9px; background: #f7f8fa; }
 .chat-msg .name { font-weight: 700; color: var(--accent); }
 .chat-msg.dead .name { color: var(--text-muted); text-decoration: line-through; }
 
@@ -271,17 +298,25 @@ body.vote-mode .phase-banner { background: linear-gradient(135deg, rgba(239,68,6
     display: flex; justify-content: space-between; align-items: center;
     flex-wrap: wrap; gap: 8px;
     padding: 10px 14px; margin-bottom: 12px;
-    background: #fff; border-bottom: 2px solid rgba(0,0,0,0.08);
+    background: #fff; border-bottom: 1px solid rgba(15,23,42,0.07);
 }
 .doc-status { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
 .doc-status .icon { color: var(--accent); margin-right: 4px; }
 .doc-section {
-    padding: 18px 20px; margin-bottom: 18px;
-    background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 6px;
+    padding: 16px 18px; margin-bottom: 18px;
+    background: #fff; border: 1px solid rgba(15,23,42,0.05); border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    transition: box-shadow 0.2s, transform 0.2s;
 }
+.doc-section:hover { box-shadow: 0 6px 18px rgba(15,23,42,0.08); transform: translateY(-1px); }
 .doc-label {
     font-size: 12px; font-weight: 600; color: var(--text-muted);
     text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 7px;
+}
+.doc-label::before {
+    content: ''; width: 4px; height: 13px; border-radius: 2px; flex: none;
+    background: linear-gradient(180deg, var(--accent), var(--accent-2));
 }
 .doc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .doc-table td {
@@ -305,11 +340,34 @@ html, body { height: 100%; overflow: hidden; }
 .doc-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 340px; gap: 18px; }
 .doc-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .doc-main .doc-section { margin-bottom: 10px; }
-/* 成员表：空间够时自然高度，12 人挤爆时在框内滚动，不把主栏撑出去 */
-#membersSection { min-height: 0; display: flex; flex-direction: column; }
-#membersSection .members-scroll { min-height: 0; overflow-y: auto; }
-#chatSection, #wolfChatSection { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-#chatSection #chat, #wolfChatSection #wolfChat { flex: 1; min-height: 0; }
+/* 成员：横向小胶囊，色点表示状态（绿=存活/已准备，灰=未准备，红=出局，橙=旁观） */
+#membersSection { min-height: 0; display: flex; flex-direction: column; flex: none; }
+#membersSection .members-scroll { min-height: 0; overflow-y: auto; max-height: 140px;
+    display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+.p-chip { position: relative; display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px; background: #f7f8fa;
+    border: 1px solid rgba(15,23,42,0.05); font-size: 13px; font-weight: 500;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    transition: transform 0.15s, box-shadow 0.15s; }
+.p-chip:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(15,23,42,0.1); }
+.p-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex: none; }
+.p-chip.you { border-color: rgba(91,99,255,0.5); background: rgba(91,99,255,0.08); }
+.p-chip.st-wait .dot { background: #c0c4cc; }
+.p-chip.st-spec .dot { background: var(--warn); }
+.p-chip.st-dead { opacity: 0.55; text-decoration: line-through; }
+.p-chip.st-dead .dot { background: var(--danger); }
+.p-chip .role-badge { font-size: 10px; padding: 1px 6px; }
+/* 踢出：悬浮时出现在右上角 */
+.p-chip .kick { opacity: 0; position: absolute; top: -7px; right: -7px; width: 18px; height: 18px;
+    line-height: 15px; text-align: center; border-radius: 50%; background: var(--danger); color: #fff;
+    font-size: 11px; cursor: pointer; border: 2px solid #fff; transition: opacity 0.15s; }
+.p-chip:hover .kick { opacity: 1; }
+/* 资料卡：私密信息整局累积会越撑越高，允许收缩+内部滚，别把聊天区挤没 */
+#roleCard { min-height: 0; overflow-y: auto; }
+/* 批注 + 狼人频道并排，平分主栏剩余高度 */
+.chat-row { flex: 1; min-height: 0; display: flex; gap: 10px; }
+.chat-row .doc-section { flex: 1; min-width: 0; margin-bottom: 0; display: flex; flex-direction: column; }
+.chat-row #chat, .chat-row #wolfChat { flex: 1; min-height: 0; }
 .doc-side { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .doc-side .doc-section { margin: 0; display: flex; flex-direction: column; min-height: 0; }
 .doc-side .doc-section:last-child { flex: 1; }
@@ -323,6 +381,7 @@ html, body { height: 100%; overflow: hidden; }
     .doc-side #log { max-height: 300px; }
     .doc-main { overflow: visible; display: block; }
     #chatSection, #wolfChatSection { flex: none; }
+    .chat-row { flex: none; flex-direction: column; }
     #chat, #wolfChat { max-height: 22vh; min-height: 100px; }
 }
 
@@ -377,7 +436,7 @@ html, body { height: 100%; overflow: hidden; }
             <div id="phaseInfo" class="doc-status"></div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-            <span class="small">会议号 <span id="roomInfo" class="tag"></span></span>
+            <span class="small">会议号 <span id="roomInfo" class="tag" onclick="copyRoom()" title="点击复制" style="cursor:pointer"></span></span>
             <button onclick="quitGame()" class="ghost" style="padding:6px 12px;font-size:13px;color:#dc2626">离开</button>
         </div>
     </div>
@@ -392,26 +451,28 @@ html, body { height: 100%; overflow: hidden; }
 
             <div class="doc-section" id="membersSection">
                 <div class="doc-label">成员</div>
-                <div class="members-scroll"><table class="doc-table" id="playersList"></table></div>
+                <div class="members-scroll" id="playersList"></div>
             </div>
 
-            <div class="doc-section" id="chatSection">
-                <div class="doc-label">批注</div>
-                <div id="chat" style="overflow-y:auto;margin-bottom:8px;font-size:14px"></div>
-                <div class="flex">
-                    <input type="text" id="chatInput" placeholder="添加批注（Enter 发送）" maxlength="200"
-                           onkeydown="if(event.key==='Enter')sendChat()">
-                    <button id="chatSend" onclick="sendChat()" class="ghost">发送</button>
+            <div class="chat-row">
+                <div class="doc-section" id="chatSection">
+                    <div class="doc-label">批注</div>
+                    <div id="chat" style="overflow-y:auto;margin-bottom:8px;font-size:14px"></div>
+                    <div class="flex">
+                        <input type="text" id="chatInput" placeholder="添加批注（Enter 发送）" maxlength="200"
+                               onkeydown="if(event.key==='Enter')sendChat()">
+                        <button id="chatSend" onclick="sendChat()" class="ghost">发送</button>
+                    </div>
                 </div>
-            </div>
 
-            <div class="doc-section hidden" id="wolfChatSection">
-                <div class="doc-label" style="color:#b91c1c">🐺 狼人频道（仅同伴可见）</div>
-                <div id="wolfChat" style="overflow-y:auto;margin-bottom:8px;font-size:14px"></div>
-                <div class="flex">
-                    <input type="text" id="wolfChatInput" placeholder="对同伴说话（Enter 发送）" maxlength="200"
-                           onkeydown="if(event.key==='Enter')sendWolfChat()">
-                    <button id="wolfChatSend" onclick="sendWolfChat()" class="danger">发送</button>
+                <div class="doc-section hidden" id="wolfChatSection">
+                    <div class="doc-label">🐺 狼人频道（仅同伴可见）</div>
+                    <div id="wolfChat" style="overflow-y:auto;margin-bottom:8px;font-size:14px"></div>
+                    <div class="flex">
+                        <input type="text" id="wolfChatInput" placeholder="对同伴说话（Enter 发送）" maxlength="200"
+                               onkeydown="if(event.key==='Enter')sendWolfChat()">
+                        <button id="wolfChatSend" onclick="sendWolfChat()" class="ghost">发送</button>
+                    </div>
                 </div>
             </div>
         </main>
@@ -493,6 +554,15 @@ async function joinRoom() {
     const rid = $('joinIdInput').value.trim();
     if (!rid) return showErr('请填写房间号');
     showErr('');
+    // 刷新/断线后恢复失败、又手输同一房号的场景：先找回原座位，别开新号
+    const savedTok = localStorage.getItem('ww_token');
+    if (savedTok && localStorage.getItem('ww_room') === rid) {
+        try {
+            const r = await fetch(`/api/state?token=${encodeURIComponent(savedTok)}&since=0&chatSince=0&wolfChatSince=0`);
+            const d = await r.json();
+            if (!d.error) { token = savedTok; roomId = rid; enterGame(); return; }
+        } catch (e) { /* 恢复不了就走正常加入 */ }
+    }
     const r = await post('/api/join', {roomId: rid});
     if (r.error) return showErr(r.error);
     token = r.token; roomId = r.roomId;
@@ -504,7 +574,8 @@ async function joinRoom() {
 function enterGame() {
     $('loginView').classList.add('hidden');
     $('gameView').classList.remove('hidden');
-    $('roomInfo').textContent = '房间号 ' + roomId + '（分享给其他玩家加入）';
+    $('roomInfo').textContent = roomId;
+    roomIdToCopy = roomId;
     poll();
 }
 
@@ -584,41 +655,41 @@ function render(s) {
         for (const m of s.wolf_chat) {
             const el = document.createElement('div');
             el.className = 'chat-msg';
-            el.innerHTML = '<span class="name" style="color:#b91c1c">' + escapeHtml(m.name) + ':</span> ' + escapeHtml(m.text);
+            el.innerHTML = '<span class="name" style="color:var(--text-dim)">' + escapeHtml(m.name) + ':</span> ' + escapeHtml(m.text);
             wc.appendChild(el);
             wolfChatSince = Math.max(wolfChatSince, m.id);
         }
         wc.scrollTop = wc.scrollHeight;
     }
-    // 玩家列表（表格行）
+    // 玩家列表（横向胶囊，色点=状态）
     const pl = $('playersList');
-    let html = '<tbody>';
-    s.players.forEach((p, i) => {
-        const trCls = (p.alive ? '' : 'dead') + (p.isYou ? ' you' : '');
-        let stTxt, stCls;
+    let html = '';
+    s.players.forEach(p => {
+        let st = '';
         if (s.phase === 'waiting') {
-            // 等待阶段显示准备状态
-            if (p.isYou && s.isHost) { stTxt = '房主'; stCls = ''; }
-            else if (p.ready) { stTxt = '已准备 ✓'; stCls = ''; }
-            else { stTxt = '未准备'; stCls = 'left'; }
-        } else {
-            stTxt = p.left ? '已离开' : (p.spectator ? '旁观' : (!p.alive ? '出局' : '在线'));
-            stCls = p.left ? 'left' : (p.spectator ? 'left' : (!p.alive ? 'dead' : ''));
+            const ready = p.ready || (p.isYou && s.isHost);   // 房主不用准备
+            if (!ready) st = 'st-wait';
+        } else if (p.spectator) {
+            st = 'st-spec';
+        } else if (!p.alive) {
+            st = 'st-dead';
         }
-        let nm = escapeHtml(p.name) + (p.isYou ? '<span class="you">（你）</span>' : '');
-        if (p.role) nm += ' <span class="role-badge role-' + p.role + '" style="font-size:10px;padding:1px 6px">' + roleName(p.role) + '</span>';
-        // ponytail: 房主可在任意阶段踢人（除自己、已离开的）
-        if (s.isHost && !p.isYou && !p.left) {
-            nm += ` <button onclick="kickPlayer('${escapeHtml(p.token)}')" class="ghost" style="padding:2px 8px;font-size:11px;color:#dc2626;margin-left:6px;border-color:rgba(239,68,68,0.3)">踢出</button>`;
-        }
-        html += `<tr class="${trCls}"><td class="idx">${i+1}</td><td class="nm">${nm}</td><td class="st ${stCls}">${stTxt}</td></tr>`;
+        let inner = '<span class="dot"></span>' + escapeHtml(p.name)
+                  + (p.isYou ? '<span style="font-size:11px;color:var(--accent)">（你）</span>' : '')
+                  + ((p.isYou && s.isHost) ? '<span style="font-size:10px;color:var(--warn)">★房主</span>' : '');
+        if (p.role) inner += ' <span class="role-badge role-' + p.role + '">' + roleName(p.role) + '</span>';
+        // 房主悬浮胶囊右上角出现 ✕ 踢人（不能踢自己/已离开的）
+        const kick = (s.isHost && !p.isYou && !p.left)
+            ? `<span class="kick" title="踢出" onclick="kickPlayer('${escapeHtml(p.token)}')">✕</span>` : '';
+        html += `<span class="p-chip ${st}${p.isYou ? ' you' : ''}">${inner}${kick}</span>`;
     });
-    pl.innerHTML = html + '</tbody>';
+    pl.innerHTML = html;
     // 身份
     const roleDiv = $('roleInfo');
     let roleHtml;
     if (s.myRole) {
-        roleHtml = '<span class="role-badge role-' + s.myRole + '">' + s.myRoleName + '</span> '
+        const badgeCls = (s.myRole === 'wolf' && s.phase !== 'ended') ? 'role-badge stealth' : 'role-badge role-' + s.myRole;
+        roleHtml = '<span class="' + badgeCls + '">' + s.myRoleName + '</span> '
                  + '<span class="small">' + escapeHtml(s.myRoleDesc || '') + '</span>';
         if (s.teammates && s.teammates.length) {
             roleHtml += '<div class="small mt">狼人同伴：<b>' + s.teammates.map(escapeHtml).join('、') + '</b></div>';
@@ -723,6 +794,35 @@ setInterval(() => {
     }
 }, 1000);
 
+function renderRoleSetup(s) {
+    const meta = [
+        ['wolf', '狼人', 'role-wolf'], ['seer', '预言家', 'role-seer'],
+        ['witch', '女巫', 'role-witch'], ['hunter', '猎人', 'role-hunter'],
+        ['villager', '村民', 'role-villager'],
+    ];
+    const c = s.roleCounts || {};
+    const need = Math.max(0, -(c.villager || 0));   // 配置席位超出当前人数的缺口
+    let h = '<div class="small" style="margin:6px 0 0">角色配置（村民自动补齐，未调整时按人数取默认）</div>'
+          + '<div class="role-cfg-grid">';
+    for (const [r, name, cls] of meta) {
+        h += `<div class="role-cfg"><span class="role-badge ${cls}" style="font-size:11px;padding:2px 10px">${name}</span>`
+           + `<div class="cnt">${Math.max(c[r] == null ? 0 : c[r], 0)}</div>`;
+        if (r === 'villager') {
+            h += '<div class="auto">自动</div>';
+        } else {
+            h += `<div class="btns">`
+               + `<span class="step-btn" onclick="doAction('set_role',{role:'${r}',delta:-1})">−</span>`
+               + `<span class="step-btn" onclick="doAction('set_role',{role:'${r}',delta:1})">＋</span>`
+               + `</div>`;
+        }
+        h += '</div>';
+    }
+    h += '</div><div style="text-align:right;margin-top:2px">'
+       + '<span class="tag" style="cursor:pointer" onclick="doAction(\'reset_roles\')">恢复默认</span></div>';
+    if (need) h += `<div class="small" style="color:var(--warn)">当前 ${s.players.length} 人，此配置还需 ${need} 人才够开局</div>`;
+    return h;
+}
+
 function renderActions(s) {
     const panel = $('actionPanel');
     let html = '';
@@ -737,6 +837,8 @@ function renderActions(s) {
         for (const a of (s.actions || [])) {
             if (a.type === 'start_game') {
                 html += `<button onclick="doAction('start_game')" class="success">开始会议</button>`;
+            } else if (a.type === 'role_setup') {
+                html += renderRoleSetup(s);
             } else if (a.type === 'toggle_ready') {
                 if (a.ready) {
                     html += `<button onclick="doAction('toggle_ready')" class="ghost">取消准备</button>`;
@@ -828,9 +930,22 @@ function togglePick(el, key) {
     }
 }
 
+let roomIdToCopy = '';
+async function copyRoom() {
+    const id = roomIdToCopy || $('roomInfo').textContent.trim();
+    if (!id) return;
+    try { await navigator.clipboard.writeText(id); }
+    catch (e) {   // http 内网下 clipboard API 不可用，退回老办法
+        const ta = document.createElement('textarea');
+        ta.value = id; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    toast('会议号 ' + id + ' 已复制');
+}
+
 async function doAction(type, target) {
     const body = {token, type};
-    if (target !== undefined) body.target = target;
+    if (target !== undefined) Object.assign(body, typeof target === 'object' ? target : {target});
     const r = await post('/api/action', body);
     if (r.error) toast(r.error);
     selected = {};
@@ -885,7 +1000,8 @@ async function sendWolfChat() {
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
-    await post('/api/action', {token, type:'wolf_chat', text});
+    const r = await post('/api/action', {token, type:'wolf_chat', text});
+    if (r.error) { toast(r.error); input.value = text; }   // 失败还原文字，别白打
 }
 
 function clearLog() {
@@ -899,10 +1015,7 @@ async function tryRestore(attempt) {
         const r = await fetch(`/api/state?token=${encodeURIComponent(token)}&since=0&chatSince=0&wolfChatSince=0`);
         const d = await r.json();
         if (!d.error) {
-            $('loginView').classList.add('hidden');
-            $('gameView').classList.remove('hidden');
-            $('roomInfo').textContent = '会议号 ' + roomId;
-            poll();
+            enterGame();
         } else {
             localStorage.removeItem('ww_token');
             localStorage.removeItem('ww_room');
