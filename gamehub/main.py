@@ -56,6 +56,70 @@ werewolf._INDEX_CANDIDATES = [os.path.join(HERE, 'index.html')]
 werewolf.Handler.protocol_version = 'HTTP/1.1'
 
 
+# ---- 「返回大厅」按钮（注入层）----
+# 大厅地址只有合集层知道：单端口=同源 '/'，多端口=hub 端口（bind 后回填 JS 表达式）。
+# 游戏独立运行（不经合集）不会走到这里，页面保持原样。
+_HUB_REF = {'js': '"/"'}
+
+
+def _back_snippet():
+    # 按钮跟随 #loginView 显隐：两个游戏都用这个 id，进房间后隐藏（500ms 轮询，
+    # 兼容 class 隐藏和 inline style 隐藏两种写法）
+    return ('<script>window.HUB_HOME=' + _HUB_REF['js'] + ';</script>\n'
+            '<a id="hubBack" href="/">返回大厅</a>\n'
+            '<style>#hubBack{position:fixed;left:14px;bottom:14px;z-index:9999;'
+            'padding:8px 16px;border-radius:999px;color:#fff;text-decoration:none;'
+            'font-size:13px;font-weight:600;font-family:inherit;'
+            'background:linear-gradient(135deg,#5b63ff,#9c4fc4);'
+            'box-shadow:0 2px 8px rgba(0,0,0,.2)}</style>\n'
+            '<script>document.getElementById("hubBack").href=window.HUB_HOME;'
+            'setInterval(function(){var l=document.getElementById("loginView"),'
+            'b=document.getElementById("hubBack");'
+            'if(l&&b)b.style.display=getComputedStyle(l).display==="none"?"none":""},500);'
+            '</script>').encode('utf-8')
+
+
+def inject_back_button(html):
+    """幂等注入到 </body> 前；已注入过或无 </body> 原样返回。"""
+    if html is None or b'id="hubBack"' in html:
+        return html
+    return html.replace(b'</body>', _back_snippet() + b'</body>', 1)
+
+
+# 3) 包一层两个游戏的 HTML 出口（多端口模式直接由游戏服务出页面）
+_load_idx = werewolf.load_index_html
+
+
+def _load_idx_with_back():
+    body = _load_idx()
+    return inject_back_button(body) if body else body
+
+
+werewolf.load_index_html = _load_idx_with_back
+
+_uc_file = undercover.Handler._file
+
+
+def _uc_file_with_back(self, name, ct):
+    if ct.startswith('text/html'):
+        try:
+            with open(name, 'rb') as f:
+                body = inject_back_button(f.read())
+        except FileNotFoundError:
+            return self._j(404, {'err': 'no html'})
+        self.send_response(200)
+        self.send_header('Content-Type', ct)
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-cache')  # 卧底原版没带，浏览器会缓存旧页面
+        self.end_headers()
+        self.wfile.write(body)
+        return
+    return _uc_file(self, name, ct)
+
+
+undercover.Handler._file = _uc_file_with_back
+
+
 # ============================================================
 # 大厅
 # ============================================================
@@ -96,7 +160,7 @@ __SCRIPT__
 _SCRIPT_PORTS = """
 const G = [
   {t:'狼人杀',   d:'4-12 人 · 身份对抗 · 预言家 / 女巫 / 猎人', p:__W__},
-  {t:'谁是卧底', d:'4-5 人 · 轮流描述词语 · 揪出词不同的卧底',   p:__U__},
+  {t:'谁是卧底', d:'4-12 人 · 轮流描述词语 · 揪出词不同的卧底',   p:__U__},
 ];
 document.getElementById('g').innerHTML = G.map(g =>
   '<a class="card" href="http://' + location.hostname + ':' + g.p + '/">' +
@@ -108,7 +172,7 @@ document.getElementById('g').innerHTML = G.map(g =>
 _SCRIPT_PATHS = """
 const G = [
   {t:'狼人杀',   d:'4-12 人 · 身份对抗 · 预言家 / 女巫 / 猎人', h:'/werewolf/'},
-  {t:'谁是卧底', d:'4-5 人 · 轮流描述词语 · 揪出词不同的卧底',   h:'/undercover/'},
+  {t:'谁是卧底', d:'4-12 人 · 轮流描述词语 · 揪出词不同的卧底',   h:'/undercover/'},
 ];
 document.getElementById('g').innerHTML = G.map(g =>
   '<a class="card" href="' + g.h + '">' +
@@ -208,12 +272,16 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if 'text/html' in (ctype or ''):
             data = data.replace(b'/api/', prefix.encode() + b'/api/')
             data = data.replace(b'<head>', b'<head>' + _FETCH_PATCH, 1)
+            data = inject_back_button(data)  # 幂等：出口包装层可能已注入
+            return self._reply(code, data, ctype, nocache=True)
         self._reply(code, data, ctype)
 
-    def _reply(self, code, body, ctype):
+    def _reply(self, code, body, ctype, nocache=False):
         self.send_response(code)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
+        if nocache:
+            self.send_header('Cache-Control', 'no-cache')  # 代理不转发上游头，这里补
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -294,6 +362,8 @@ def main():
     uc_srv, uc_p = bind_server(undercover.Handler, uc_p)
     HubHandler.page = hub_page(wolf_p, uc_p)
     hub_srv, hub_p = bind_server(HubHandler, hub_p)
+    # 回填「返回大厅」按钮的大厅地址（游戏页在别的端口，需拼 location.hostname）
+    _HUB_REF['js'] = f"'http://'+location.hostname+':{hub_p}/'"
 
     threading.Thread(target=wolf_srv.serve_forever, daemon=True).start()
     threading.Thread(target=uc_srv.serve_forever, daemon=True).start()

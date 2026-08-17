@@ -11,9 +11,9 @@
     浏览器打开 http://本机IP:8001
 
 特性:
-    - 4-5 人局，1 或 2 卧底（5 人双卧底更刺激）
+    - 4-12 人局，1 或 2 卧底（5 人双卧底更刺激）
     - 房间制，6 位房间号
-    - 私下查看词语 → 轮流描述 → 投票放逐
+    - 私下限时查看词语，忘记可再看 → 轮流描述 → 投票放逐
     - 自动违规检测：描述含词中任一字直接出局
     - 自动判定胜负
 
@@ -32,7 +32,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8001
-MIN_PLAYERS, MAX_PLAYERS = 4, 5
+MIN_PLAYERS, MAX_PLAYERS = 4, 12
+WORD_REVEAL_SECONDS = 8
 
 ROOMS = {}
 LOCK = threading.Lock()
@@ -65,6 +66,7 @@ class Player:
         self.left = False             # 中途离场
         self.ready = False
         self.viewed = False           # 是否已查看自己的词
+        self.word_visible_until = 0.0 # 词语临时展示截止时间
 
 
 class Room:
@@ -83,8 +85,6 @@ class Room:
         self.speaker_idx = 0
         self.public_log = []
         self.next_mid = 1
-        self.chat_log = []
-        self.next_chat_id = 1
         self.winner = None
         self.created_at = time.time()
 
@@ -99,11 +99,6 @@ class Room:
         mid = self.next_mid
         self.next_mid += 1
         self.public_log.append({'id': mid, 'text': text})
-
-    def add_chat(self, name, text, alive):
-        cid = self.next_chat_id
-        self.next_chat_id += 1
-        self.chat_log.append({'id': cid, 'name': name, 'text': text, 'alive': alive})
 
     def alive_players(self):
         return [p for p in self.players.values() if p.alive]
@@ -131,6 +126,7 @@ def start_game(room):
         p.role = r
         p.word = uc if r == 'undercover' else civ
         p.viewed = False
+        p.word_visible_until = 0.0
         p.alive = True
         p.ready = False
     room.round = 1
@@ -138,6 +134,7 @@ def start_game(room):
     room.descriptions = {}
     room.votes = {}
     room.speaker_order = [p.token for p in room.players.values() if p.alive]
+    random.shuffle(room.speaker_order)   # 发言顺序随机，固定顺序对先手不利
     room.speaker_idx = 0
     room.winner = None
     first = room.players[room.speaker_order[0]]
@@ -146,8 +143,13 @@ def start_game(room):
 
 
 def view_word(room, player):
-    # 只是标记 + 返回词，不再阻塞流程；自己的词随时可看、一直可见
+    # 只标记“看过”，不阻塞流程。词语限时显示，忘记可再看。
     player.viewed = True
+    player.word_visible_until = time.time() + WORD_REVEAL_SECONDS
+
+
+def hide_word(player):
+    player.word_visible_until = 0.0
 
 
 def _post_describe(room):
@@ -178,7 +180,7 @@ def describe(room, token, text):
     leaked = sorted(set(c for c in p.word if c in text))
     if leaked:
         p.alive = False
-        room.add_msg(f'【{p.name}】的描述包含词中字 "{"".join(leaked)}"，违规出局！（其词：{p.word}）')
+        room.add_msg(f'【{p.name}】的描述包含词中的字，违规出局！')
         room.speaker_order = [t for t in room.speaker_order if t != token]
         # 不递增 idx：下一位已经在当前位置
         if check_winner(room):
@@ -199,14 +201,6 @@ def skip_describe(room, token):
     room.add_msg(f'【{p.name}】选择跳过本轮描述。')
     room.speaker_idx += 1
     _post_describe(room)
-    return True, 'ok'
-
-
-def chat(room, player, text):
-    text = (text or '').strip()
-    if not text or len(text) > 200:
-        return False, '内容不合法'
-    room.add_chat(player.name, text, player.alive)
     return True, 'ok'
 
 
@@ -242,12 +236,13 @@ def tally_votes(room):
     p = room.players[eliminated]
     p.alive = False
     role_cn = '卧底' if p.role == 'undercover' else '平民'
-    room.add_msg(f'【{p.name}】以 {max_c} 票被放逐。身份：{role_cn}（词：{p.word}）。')
+    room.add_msg(f'【{p.name}】以 {max_c} 票被放逐。身份：{role_cn}。')
     if check_winner(room):
         return
     room.round += 1
     room.phase = 'describe'
     room.speaker_order = [p.token for p in room.alive_players()]
+    random.shuffle(room.speaker_order)   # 每轮重新随机发言顺序
     room.speaker_idx = 0
     first = room.players[room.speaker_order[0]]
     room.add_msg(f'第 {room.round} 轮开始。从【{first.name}】描述。')
@@ -279,6 +274,7 @@ def reset_game(room):
         p.alive = True
         p.ready = False
         p.viewed = False
+        p.word_visible_until = 0.0
     room.phase = 'waiting'
     room.round = 0
     room.civ_word = None
@@ -362,15 +358,17 @@ def handle_action(room, p, body):
         view_word(room, p)
         # ponytail: 不返回 role —— 谁是卧底的核心是玩家不知道自己身份，
         # 只能靠听描述推断。出局/结束时才亮。
-        return {'ok': True, 'word': p.word}
+        return {'ok': True, 'word': p.word, 'visible_for': WORD_REVEAL_SECONDS}
+    if t == 'hide_word':
+        if room.phase in ('waiting', 'ended'):
+            return {'err': '当前没有可隐藏的词语'}
+        hide_word(p)
+        return {'ok': True}
     if t == 'describe':
         ok, msg = describe(room, p.token, body.get('text', ''))
         return {'ok': ok, 'msg': msg}
     if t == 'skip_describe':
         ok, msg = skip_describe(room, p.token)
-        return {'ok': ok, 'msg': msg}
-    if t == 'chat':
-        ok, msg = chat(room, p, body.get('text', ''))
         return {'ok': ok, 'msg': msg}
     if t == 'vote':
         ok, msg = vote(room, p.token, body.get('target', ''))
@@ -404,21 +402,27 @@ def find_player(token):
     return None, None
 
 
-def state_of(room, p, since, csince):
+def state_of(room, p, since):
     if not p:
         return {'error': 'invalid token'}
     pending = [m for m in room.public_log if m['id'] > since]
-    new_chat = [c for c in room.chat_log if c['id'] > csince]
-    my_vote = room.votes.get(room.round, {}).get(p.token)
+    votes_now = room.votes.get(room.round, {})
+    my_vote = votes_now.get(p.token)
     return {
         'roomId': room.id,
         'phase': room.phase,
+        'maxPlayers': MAX_PLAYERS,
         'round': room.round,
         'myName': p.name,
         'myToken': p.token,
         # 谁是卧底规则：自己不知道身份，只有结束才亮（放逐消息会公布出局者身份）
         'myRole': p.role if room.phase == 'ended' else None,
-        'myWord': p.word if room.phase != 'waiting' else None,
+        # 只在玩家主动查看后的短窗口内下发，避免词语一直留在页面/轮询响应里
+        'myWord': (p.word
+                   if room.phase in ('describe', 'vote')
+                   and p.word_visible_until > time.time()
+                   else None),
+        'wordRevealSeconds': WORD_REVEAL_SECONDS,
         'viewed': p.viewed,
         'alive': p.alive,
         'isHost': room.host == p.token,
@@ -438,13 +442,14 @@ def state_of(room, p, since, csince):
         'all_descriptions': [{'round': r, 'items': items}
                              for r, items in sorted(room.descriptions.items())],
         'voted': my_vote is not None,
+        # 投票阶段公示"谁还没投"（只公开进度，不公开投给了谁）
+        'pending_voters': ([x.name for x in room.alive_players() if x.token not in votes_now]
+                           if room.phase == 'vote' else []),
         'vote_targets': ([{'name': x.name, 'token': x.token}
                           for x in room.alive_players() if x.token != p.token]
                          if (room.phase == 'vote' and p.alive) else []),
         'log': pending,
         'log_next': room.next_mid,
-        'chat': new_chat,
-        'chat_next': room.next_chat_id,
         'alive_count': len(room.alive_players()),
     }
 
@@ -488,12 +493,11 @@ class Handler(BaseHTTPRequestHandler):
             q = parse_qs(u.query)
             token = q.get('token', [''])[0]
             since = int(q.get('since', ['0'])[0])
-            csince = int(q.get('chatSince', ['0'])[0])
             with LOCK:
                 room, p = find_player(token)
                 if not room:
                     return self._j(200, {'error': 'invalid token'})
-                return self._j(200, state_of(room, p, since, csince))
+                return self._j(200, state_of(room, p, since))
         return self._j(404, {'err': 'not found'})
 
     def do_POST(self):

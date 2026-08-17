@@ -17,9 +17,32 @@
 html, body { margin: 0; padding: 0; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
-    max-width: 900px; margin: 0 auto; padding: 0 14px 40px;
+    margin: 0 auto; padding: 0 16px;
     background: #f7f8fa; color: var(--text);
-    min-height: 100vh;
+    height: 100vh; height: 100dvh;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+}
+#gameView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#content { flex: 1; min-height: 0; display: flex; flex-direction: row; gap: 12px; }
+.main-area { flex: 1.7; min-width: 0; overflow-y: auto; }
+/* 右侧操作记录面板 = #content 的直接子 section（主区 section 都在 .main-area 里） */
+#content > .doc-section {
+    flex: 1; min-width: 0; margin-bottom: 0;
+    display: flex; flex-direction: column; overflow: hidden;
+}
+.scroll-pane { flex: 1; min-height: 0; overflow-y: auto; }
+/* 窄屏回到上下结构：上面游戏区，底部操作记录 */
+@media (max-width: 760px) {
+    #content { flex-direction: column; }
+    .main-area { flex: 1; min-height: 0; }
+    #content > .doc-section { flex: none; height: 30vh; min-height: 140px; }
+}
+/* 细滚动条，别用系统默认大粗条 */
+.main-area, .scroll-pane { scrollbar-width: thin; }
+.main-area::-webkit-scrollbar, .scroll-pane::-webkit-scrollbar { width: 6px; }
+.main-area::-webkit-scrollbar-thumb, .scroll-pane::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.18); border-radius: 3px;
 }
 h1 { font-size: 1.35em; margin: 0; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
 
@@ -99,6 +122,13 @@ button.ghost:hover { background: #ebedf0; }
     padding: 22px 10px; color: var(--accent);
     letter-spacing: 4px; user-select: all;
 }
+.word-display.word-hidden {
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    background: repeating-linear-gradient(135deg, #f5f6f8 0 10px, #fafbfc 10px 20px);
+    border-radius: 8px;
+}
+.word-actions { text-align: center; margin-top: 8px; }
 
 /* 日志 */
 .msg {
@@ -111,15 +141,12 @@ button.ghost:hover { background: #ebedf0; }
 .msg-out { color: #b91c1c; font-weight: 700; border-left: 4px solid var(--danger); background: rgba(239,68,68,0.1); }
 .msg-end { color: #b45309; font-weight: 800; font-size: 1.05em;
     background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(156,79,196,0.18)); border-left: 4px solid var(--warn); }
-
-/* 聊天 */
-.chat-box {
-    max-height: 200px; overflow-y: auto;
-    border: 1px solid rgba(0,0,0,0.06); border-radius: 8px;
-    padding: 8px 10px; margin: 6px 0; background: #fafbfc;
+/* 操作记录整体压暗，只当背景信息；出局/结束的大字样式也压平 */
+.scroll-pane .msg { opacity: 0.55; }
+.scroll-pane .msg-out, .scroll-pane .msg-end {
+    font-size: 14px; font-weight: 400;
+    color: var(--text-dim); background: #f5f6f8;
 }
-.chat-msg { padding: 3px 0; font-size: 14px; line-height: 1.5; }
-.chat-msg .name { font-weight: 700; color: var(--accent); margin-right: 6px; }
 
 /* 目标选择 */
 .target-btn {
@@ -157,7 +184,7 @@ button + button { margin-left: 8px; }
     <button onclick="createRoom()">新建房间</button>
     <button class="ghost" onclick="joinRoom()">加入房间</button>
     <div id="loginErr" class="err"></div>
-    <div class="hint">4-5 人 · 自动编号（1号 2号…）· 每人只看自己的词</div>
+    <div class="hint">4-12 人 · 自动编号（1号 2号…）· 词语限时显示、忘记可再看</div>
   </div>
 </div>
 
@@ -166,6 +193,7 @@ button + button { margin-left: 8px; }
     <h1>办公文档</h1>
     <div style="display:flex;align-items:center;gap:12px">
       <div class="doc-status" id="topStatus"></div>
+      <button id="resetBtn" class="ghost" style="padding:4px 12px;font-size:12px;display:none" onclick="resetGame()">重置</button>
       <button class="ghost" style="padding:4px 12px;font-size:12px" onclick="exitRoom()">退出</button>
     </div>
   </div>
@@ -174,11 +202,13 @@ button + button { margin-left: 8px; }
 
 <script>
 let token = localStorage.getItem('uc_token') || '';
-let since = 0, chatSince = 0;
+let since = 0;
 let lastState = null;
 let lastSig = '';
-let logs = [];   // 前端累积全量日志/聊天。服务端只发增量，
-let chats = [];  // 不攒的话第二次轮询增量为空，整个框会消失
+let logs = [];   // 前端累积全量日志。服务端只发增量，
+                 // 不攒的话第二次轮询增量为空，整个框会消失
+let myWord = ''; // 自己看过的词留在本机内存（只在自己浏览器里，不外发），
+                 // 用于提交描述前自查爆字
 
 function post(url, body) {
     return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}).then(r=>r.json());
@@ -208,16 +238,16 @@ function showGame() {
 
 function poll() {
     if (!token) return;
-    get(`/api/state?token=${token}&since=${since}&chatSince=${chatSince}`).then(s => {
+    get(`/api/state?token=${token}&since=${since}`).then(s => {
         if (s.error) { localStorage.removeItem('uc_token'); token=''; location.reload(); return; }
         lastState = s;
+        if (s.myWord) myWord = s.myWord;
+        else if (s.phase === 'waiting' || s.phase === 'ended') myWord = '';  // 换局词会变，旧词作废
         // 增量追加进全量列表（按 id 去重）
         (s.log || []).forEach(m => { if (!logs.some(x => x.id === m.id)) logs.push(m); });
-        (s.chat || []).forEach(m => { if (!chats.some(x => x.id === m.id)) chats.push(m); });
-        const sig = JSON.stringify(s) + logs.length + chats.length;
+        const sig = JSON.stringify(s) + logs.length;
         if (sig !== lastSig) { render(s); lastSig = sig; }  // 状态没变不重绘，防闪
         since = s.log_next || since;
-        chatSince = s.chat_next || chatSince;
         setTimeout(poll, 1000);
     }).catch(() => setTimeout(poll, 2000));
 }
@@ -238,8 +268,8 @@ function act(body, cb) {
 
 function refresh() {
     if (!token) return;
-    get(`/api/state?token=${token}&since=0&chatSince=0`).then(s => {
-        if (!s.error) { since = 0; chatSince = 0; lastSig = ''; poll(); }
+    get(`/api/state?token=${token}&since=0`).then(s => {
+        if (!s.error) { since = 0; lastSig = ''; poll(); }
     });
 }
 
@@ -249,6 +279,24 @@ function exitRoom() {
         localStorage.removeItem('uc_token');
         token = ''; location.reload();
     });
+}
+
+function resetGame() {
+    if (!confirm('确定重置本局？将清空身份、词语和描述，全员回到大厅。')) return;
+    act({type:'reset'}, () => refresh());
+}
+
+function submitDesc() {
+    const el = document.getElementById('descInput');
+    // 爆字自查：含词中任一字就不发，标出来让玩家重说（服务端还有强制出局兜底）
+    const leaked = [...new Set(myWord)].filter(c => c && el.value.includes(c));
+    if (leaked.length) {
+        document.getElementById('descErr').textContent =
+            `描述包含词中的字：${leaked.join('、')}，请换一种说法`;
+        return;
+    }
+    act({type:'describe', text: el.value});
+    el.value = '';
 }
 
 /* 成员表 */
@@ -272,36 +320,28 @@ function membersHtml(s) {
             <td class="st">${st.join(' · ')}${kick}</td>
         </tr>`;
     }).join('');
-    return `<div class="doc-section"><div class="doc-label">成员 ${s.players.length}/${5}</div>
+    return `<div class="doc-section"><div class="doc-label">成员 ${s.players.length}${s.maxPlayers ? '/' + s.maxPlayers : ''}</div>
         <table class="doc-table">${rows}</table></div>`;
 }
 
 function logHtml() {
     if (!logs.length) return '';
     return `<div class="doc-section"><div class="doc-label">操作记录</div>
-        ${logs.map(m => {
+        <div class="scroll-pane" id="logBox">${logs.map(m => {
             let cls = 'msg';
             if (m.text.includes('出局') || m.text.includes('被放逐')) cls = 'msg-out';
             else if (m.text.includes('游戏结束')) cls = 'msg-end';
             else if (m.text.includes('】：')) cls = 'msg-describe';
             return `<div class="${cls}">${esc(m.text)}</div>`;
-        }).join('')}</div>`;
-}
-
-function chatHtml(s) {
-    const canTalk = (s.phase === 'vote' || s.phase === 'describe') && s.alive;
-    const sendBox = canTalk
-        ? `<input id="chatInput" type="text" placeholder="讨论..." maxlength="200"
-           onkeydown="if(event.key==='Enter'){act({type:'chat',text:this.value});this.value='';}">`
-        : '';
-    return `<div class="doc-section"><div class="doc-label">讨论</div>
-        <div class="chat-box" id="chatBox">${chats.map(c=>`<div class="chat-msg"><span class="name">${esc(c.name)}</span>${esc(c.text)}</div>`).join('') || '<div class="hint">还没有讨论</div>'}</div>
-        ${sendBox}</div>`;
+        }).join('')}</div></div>`;
 }
 
 function render(s) {
     document.getElementById('topStatus').textContent =
         `房间 ${s.roomId} · 第 ${s.round || '-'} 轮 · 存活 ${s.alive_count}`;
+    // 游戏中给房主显示重置入口；等待/结束阶段没必要（结束时已有"再来一局"）
+    document.getElementById('resetBtn').style.display =
+        (s.isHost && (s.phase === 'describe' || s.phase === 'vote')) ? '' : 'none';
     const c = document.getElementById('content');
     // 重绘前记住正在输入的框（id/值/光标），重绘后恢复，防丢字
     const a = document.activeElement;
@@ -309,14 +349,13 @@ function render(s) {
     if (a && a.tagName === 'INPUT' && a.id) {
         keep = {id: a.id, val: a.value, pos: a.selectionStart};
     }
-    let html = membersHtml(s);
-    if (s.phase === 'waiting')      html += waitingHtml(s);
-    else if (s.phase === 'describe')html += wordCardHtml(s) + describeHtml(s);
-    else if (s.phase === 'vote')    html += wordCardHtml(s) + voteHtml(s);
-    else if (s.phase === 'ended')   html += endedHtml(s);
-    html += logHtml();
-    if (s.phase !== 'waiting') html += chatHtml(s);
-    c.innerHTML = html;
+    let main = membersHtml(s);
+    if (s.phase === 'waiting')      main += waitingHtml(s);
+    else if (s.phase === 'describe')main += wordCardHtml(s) + describeHtml(s);
+    else if (s.phase === 'vote')    main += wordCardHtml(s) + voteHtml(s);
+    else if (s.phase === 'ended')   main += endedHtml(s);
+    const lh = logHtml();
+    c.innerHTML = `<div class="main-area">${main}</div>` + (lh || '');
     if (keep) {
         const el = document.getElementById(keep.id);
         if (el) {
@@ -326,8 +365,8 @@ function render(s) {
             el.setSelectionRange(pos, pos);
         }
     }
-    const cb = document.getElementById('chatBox');
-    if (cb) cb.scrollTop = cb.scrollHeight;
+    const lb = document.getElementById('logBox');
+    if (lb) lb.scrollTop = lb.scrollHeight;
 }
 
 function waitingHtml(s) {
@@ -351,12 +390,19 @@ function waitingHtml(s) {
 function wordCardHtml(s) {
     if (!s.viewed) {
         return `<div class="doc-section"><div class="doc-label">我的词</div>
-            <div class="hint">确认周围没人再看。看完即可描述，不用等别人。</div>
-            <button onclick="act({type:'view_word'}, r => { if(r.ok) refresh(); })">查看我的词</button></div>`;
+            <div class="hint">确认周围没人再看。词语会显示 ${s.wordRevealSeconds || 8} 秒后自动隐藏，忘记可再看。</div>
+            <div class="word-actions"><button onclick="act({type:'view_word'}, r => { if(r.ok) refresh(); })">查看我的词</button></div></div>`;
+    }
+    if (s.myWord) {
+        return `<div class="doc-section"><div class="doc-label">我的词</div>
+            <div class="word-display">${esc(s.myWord)}</div>
+            <div class="hint" style="text-align:center">${s.wordRevealSeconds || 8} 秒后自动隐藏；你是平民还是卧底？听描述自己判断</div>
+            <div class="word-actions"><button class="ghost" onclick="act({type:'hide_word'}, r => { if(r.ok) refresh(); })">立即隐藏</button></div></div>`;
     }
     return `<div class="doc-section"><div class="doc-label">我的词</div>
-        <div class="word-display">${s.myWord}</div>
-        <div class="hint" style="text-align:center">你是平民还是卧底？听描述自己判断</div></div>`;
+        <div class="word-display word-hidden">词语已隐藏</div>
+        <div class="hint" style="text-align:center">忘了没关系，可以再看；你是平民还是卧底？听描述自己判断</div>
+        <div class="word-actions"><button onclick="act({type:'view_word'}, r => { if(r.ok) refresh(); })">再看一次</button></div></div>`;
 }
 
 function describeHtml(s) {
@@ -366,9 +412,11 @@ function describeHtml(s) {
     if (isSpeaker && s.alive) {
         myTurn = `<div class="doc-section"><div class="doc-label">轮到你描述</div>
             <input id="descInput" type="text" placeholder="一句话，不能直接说出词中的任一字" maxlength="80"
-              onkeydown="if(event.key==='Enter'){act({type:'describe',text:this.value});this.value='';}">
+              onkeydown="if(event.key==='Enter')submitDesc()"
+              oninput="document.getElementById('descErr').textContent=''">
+            <div id="descErr" class="err"></div>
             <div style="margin-top:8px">
-            <button onclick="act({type:'describe',text:document.getElementById('descInput').value});document.getElementById('descInput').value='';">提交</button>
+            <button onclick="submitDesc()">提交</button>
             <button class="ghost" onclick="act({type:'skip_describe'})">跳过</button>
             </div></div>`;
     } else if (s.alive) {
@@ -399,6 +447,8 @@ function voteHtml(s) {
             <div class="hint">选你认为的卧底（不能投自己，不能改票）</div>
             <div>${opts}</div></div>`;
     }
+    const pend = (s.pending_voters || []).join('、');
+    if (pend) voteUI += `<div class="hint" style="margin-top:6px">还没投票：${pend}</div>`;
     return allDesc + voteUI;
 }
 
@@ -417,7 +467,7 @@ function endedHtml(s) {
 
 // 自动恢复 token
 if (token) {
-    get(`/api/state?token=${token}&since=0&chatSince=0`).then(s => {
+    get(`/api/state?token=${token}&since=0`).then(s => {
         if (!s.error) showGame();
         else { localStorage.removeItem('uc_token'); token = ''; }
     }).catch(() => {});

@@ -33,7 +33,7 @@ def run_one(n, uc_count):
     assert len(uc_words) == 1, f'卧底词不一致: {uc_words}'
     assert civ_words != uc_words, '平民词与卧底词相同'
     assert room.phase == 'describe', f'start 后应直接进 describe, 实际 {room.phase}'
-    assert room.current_speaker() == list(room.players.keys())[0], '从 1 号开始'
+    assert room.current_speaker() in room.players, '发言顺序已随机，只需有人被点名'
 
     # 2. 没看词不能描述；看完即可描述，不等别人
     first_sp = room.current_speaker()
@@ -78,6 +78,35 @@ def run_word_leak_case():
     uc.describe(room, speaker, leak_text)
     assert not p.alive, '违规玩家应已出局'
     print(f'  违规检测 OK：{p.name} 描述 "{leak_text}" 含 "{p.word[0]}" → 出局')
+
+
+def run_word_privacy_case():
+    """词语只在主动查看后的短窗口内下发，可反复查看，也可立即隐藏。"""
+    room = make_room(4, 1)
+    uc.start_game(room)
+    p = room.players['tok0']
+
+    st = uc.state_of(room, p, 0)
+    assert st['viewed'] is False and st['myWord'] is None, '开局不应携带词语'
+
+    r = uc.handle_action(room, p, {'type': 'view_word'})
+    assert r['ok'] and r['word'] == p.word
+    st = uc.state_of(room, p, 0)
+    assert st['viewed'] is True and st['myWord'] == p.word, '主动查看后应临时可见'
+
+    r = uc.handle_action(room, p, {'type': 'hide_word'})
+    st = uc.state_of(room, p, 0)
+    assert r['ok'] and st['myWord'] is None, '手动隐藏后状态不应携带词语'
+
+    r = uc.handle_action(room, p, {'type': 'view_word'})
+    assert r['ok'] and r['word'] == p.word, '隐藏后应能再看一次'
+    p.word_visible_until = 0.0
+    st = uc.state_of(room, p, 0)
+    assert st['viewed'] is True and st['myWord'] is None, '过期后应自动隐藏'
+
+    uc.reset_game(room)
+    assert p.word_visible_until == 0.0, '重置应清空临时展示状态'
+    print('  词语隐藏/复查 OK')
 
 
 def run_reset_case():
@@ -146,6 +175,8 @@ def main():
     print(f'  胜者={w}  平民词={c}  卧底词={u}')
     print('--- 违规出局 ---')
     run_word_leak_case()
+    print('--- 词语隐藏/复查 ---')
+    run_word_privacy_case()
     print('--- 重置 ---')
     run_reset_case()
     print('--- 踢人/退出 ---')

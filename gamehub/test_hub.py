@@ -50,9 +50,11 @@ def run():
     st = json.loads(http('GET', url(uc, f'/api/state?token={tok}&since=0&chatSince=0')))
     assert st['phase'] == 'waiting' and st['isHost']
 
-    # 两个游戏 html 都能出（软链生效）
-    assert b'<html' in http('GET', url(wolf, '/')).lower()
-    assert b'<html' in http('GET', url(uc, '/')).lower()
+    # 两个游戏 html 都能出（软链生效），且带「返回大厅」按钮（注入层）
+    w_html = http('GET', url(wolf, '/'))
+    u_html = http('GET', url(uc, '/'))
+    assert b'<html' in w_html.lower() and b'<html' in u_html.lower()
+    assert b'id="hubBack"' in w_html and b'id="hubBack"' in u_html
 
     # ---- 单端口模式（ngrok 穿透用）----
     hub.ProxyHandler.upstream = {'/werewolf': wolf.server_address[1],
@@ -62,9 +64,10 @@ def run():
 
     page = http('GET', url(sp, '/')).decode()
     assert '/werewolf/' in page and '/undercover/' in page  # 相对路径链接
-    # HTML 被重写：API 前缀生效 + 注入了 ngrok 请求头补丁
+    # HTML 被重写：API 前缀生效 + 注入 ngrok 请求头补丁 + 返回按钮不重复注入
     w_html = http('GET', url(sp, '/werewolf/'))
     assert b'/werewolf/api/' in w_html and b'ngrok-skip-browser-warning' in w_html
+    assert w_html.count(b'id="hubBack"') == 1
     # 前缀下的完整流程：建房 → 状态
     tok = json.loads(http('POST', url(sp, '/werewolf/api/create'), {}))['token']
     st = json.loads(http('GET', url(sp, f'/werewolf/api/state?token={tok}&since=0&chatSince=0&wolfChatSince=0')))
